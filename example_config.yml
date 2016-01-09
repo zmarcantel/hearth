@@ -1,0 +1,29 @@
+directory: ~/.hearth
+environments:
+    base:
+    work:
+        install: install.sh
+        update:
+            once: "update.sh"
+            directory: "rm .cache"
+            file: chmod +x
+    home:
+        install: install.sh
+        update:
+            once: "update.sh"
+            file: chmod +x
+configs:
+    vim:
+        install: "mkdir -p ~/.vim/autoload ~/.vim/bundle && curl -LSso ~/.vim/autoload/pathogen.vim https://tpo.pe/pathogen.vim"
+        update:
+            ignore_errors: true
+            directory: "git pull"
+    zsh:
+        install: "some bash --with-config script"
+        update:
+            file: "rm $HEARTH_FILE"
+    thing:
+        update:
+            directory: "chmod 400 $HEARTH_DIR"
+        stow_args: "some --set of -- args"
+        target_dir: /etc/the_thing
