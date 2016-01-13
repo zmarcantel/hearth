@@ -6,9 +6,10 @@ const (
 	ReturnOK ReturnCode = iota
 	ReturnNoConfigFile
 	ReturnNoConfigDirectory
-	ReturnReadConfigFileFailure
+	ReturnConfigReadFileFailure
 	ReturnCreateDirectoryFailure
 	ReturnConfigMarshalFailure
 	ReturnConfigUnmarshalFailure
 	ReturnConfigWriteFailure
+	ReturnRepoCreateFailure
 )
