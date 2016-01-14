@@ -17,4 +17,6 @@ before_install:
 # install go dependencies
 install: make deps
 
-# travis automatically runs 'go test' for us
+# travis automatically runs 'go test', but we have a makefile which it also likes to run
+# so we need to be explicit here
+script: make test
