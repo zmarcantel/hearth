@@ -14,14 +14,14 @@ import (
 // Opens the ~/.hearthrc file.
 // If this file does not exist, an interactive prompt begins that will attempt to create
 // one. Because this function is integral to startup, we pass back a return code.
-func Open() (HearthConfig, error) {
-	var config HearthConfig
+func Open() (Config, error) {
+	var config Config
 	default_file := path.Join(os.Getenv("HOME"), ".hearthrc")
 
 	// try to read the default
 	config_bytes, err := ioutil.ReadFile(default_file)
 	if err != nil {
-		return HearthConfig{}, err
+		return Config{}, err
 	}
 
 	// make a config out of it
@@ -32,57 +32,63 @@ func Open() (HearthConfig, error) {
 	return config, nil
 }
 
-func CreateInteractive() (HearthConfig, error) {
-	var user_input string
-	var user_directory string
-	var config HearthConfig
-	default_directory := path.Join(os.Getenv("HOME"), ".hearth")
+func is_yes(input string) bool {
+	strings.ToLower(input)
+	return input[0] == 'y'
+}
+
+func CreateInteractive(config_path string) (Config, error) {
+	var answer string
+	var repo_dir string
+	var config Config
+
+	default_repo_path := path.Join(os.Getenv("HOME"), ".hearth")
 
 	// entry. should we make a new file?
-	fmt.Print("no .hearthrc found, create a new one? [y/n] ")
-	fmt.Scanln(&user_input)
-	strings.ToLower(user_input)
-	if user_input[0] != 'y' {
+	fmt.Printf("no %s found, create a new one? [y/n] ", default_repo_path)
+	if fmt.Scanln(&answer); is_yes(answer) == false {
 		return config, errors.New("ok then. have a good day!")
 	}
 
 	// where should the repo go?
-	fmt.Printf("what directory do you wish to use as your repository? [%s] ", default_directory)
-	fmt.Scanln(&user_directory)
-	if len(user_directory) == 0 {
-		user_directory = default_directory
+	fmt.Printf("what directory do you wish to use as your repository? [%s] ", default_repo_path)
+	if fmt.Scanln(&repo_dir); len(repo_dir) == 0 {
+		repo_dir = default_repo_path // use default
 	}
 
 	// does that directory exist yet? if so, should we ignore that fact?
-	_, err := os.Stat(user_directory)
+	_, err := os.Stat(repo_dir)
 	if err == nil {
-		fmt.Print("directory exists... overwrite? [y/n] ")
-		fmt.Scanln(&user_input)
-		strings.ToLower(user_input)
-		if user_input[0] != 'y' {
-			return config, errors.New("will not overwrite. aborting.")
+		fmt.Print("directory exists... create with dirty state? [y/n] ")
+		if fmt.Scanln(&answer); is_yes(answer) == false {
+			return config, errors.New("will not overwrite existing. aborting.")
 		}
 	} else {
-		err = os.MkdirAll(user_directory, 0755)
+		err = os.MkdirAll(repo_dir, 0755)
 		if err != nil {
 			return config, err
 		}
 	}
 
 	// set our default state
-	config.BaseDirectory = user_directory
-
-	// write the config file out
-	return config, Write(config)
+	return Create(os.Getenv("HOME"), ".hearthrc", repo_dir)
 }
 
-func Write(conf HearthConfig) error {
+func Create(conf_path, conf_fname, repo_path string) (Config, error) {
+	var config Config
+	config.BaseDirectory = repo_path
+
+	// write the config file out
+	return config, Write(path.Join(conf_path, conf_fname), config)
+}
+
+func Write(path string, conf Config) error {
 	config_bytes, err := yaml.Marshal(conf)
 	if err != nil {
 		return fmt.Errorf("could not marshal new config: %s", err.Error())
 	}
 
-	err = ioutil.WriteFile(path.Join(os.Getenv("HOME"), ".hearthrc"), config_bytes, 0755)
+	err = ioutil.WriteFile(path, config_bytes, 0755)
 	if err != nil {
 		return fmt.Errorf("could not save new config: %s", err.Error())
 	}
@@ -90,6 +96,13 @@ func Write(conf HearthConfig) error {
 	return nil
 }
 
-//
-// TODO: create non-interactive using CLI
-//
+func Load(path string) (Config, error) {
+	// check if we have a config file
+	config_bytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+
+	var config Config
+	return config, yaml.Unmarshal(config_bytes, &config)
+}

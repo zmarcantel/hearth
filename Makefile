@@ -18,3 +18,6 @@ run: build
 
 fmt:
 	@go fmt ./...
+
+test: fmt
+	@go test ./...

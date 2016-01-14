@@ -6,9 +6,7 @@ import (
 	"os"
 	"path"
 
-	"gopkg.in/yaml.v2"
-
-	"github.com/zmarcantel/hearth/repo"
+	"github.com/zmarcantel/hearth/config"
 
 	"github.com/codegangsta/cli"
 )
@@ -20,31 +18,82 @@ func main() {
 	}
 }
 
-func start_cli(c *cli.Context) {
-	var err error
-	var r repo.Repository
+func print_install(indent string, conf config.InstallConfig) {
+	if conf.PreCmd != "" {
+		fmt.Printf("%s- %s\n", indent, conf.PreCmd)
+	}
 
-	default_file := path.Join(os.Getenv("HOME"), ".hearthrc")
+	if conf.Cmd != "" {
+		fmt.Printf("%s- %s\n", indent, conf.Cmd)
+	}
 
-	// check if we have a config file
-	if _, err = os.Stat(default_file); os.IsNotExist(err) {
-		// config does not exist
-		r, err = repo.CreateWithConfig(default_file, true)
+	if conf.PostCmd != "" {
+		fmt.Printf("%s- %s\n", indent, conf.PostCmd)
+	}
+}
+
+func action_cli(ctx *cli.Context) {
+	config_path := path.Join(opts.ConfigPath, opts.ConfigFile)
+
+	// load the config
+	conf, err := config.Load(config_path)
+	if os.IsNotExist(err) {
+		log.Fatalf("failed to load hearth config from [%s], please use the create command to make one", config_path)
+	} else if err != nil {
+		log.Fatalf("could not read/load config file: %s", err.Error())
+	}
+
+	// have config
+	for name, env := range conf.Environments {
+		fmt.Printf("Installing Environment: %s\n", name)
+		print_install("\t", env.Install)
+	}
+
+	for name, app := range conf.Configs {
+		fmt.Printf("Installing App: %s\n", name)
+		print_install("\t", app.Install)
+	}
+}
+
+func action_create_config(ctx *cli.Context) {
+	if ctx.IsSet("config-path") || ctx.IsSet("config-file") || ctx.IsSet("repo") {
+		_, err := config.Create(opts.ConfigPath, opts.ConfigFile, opts.RepoPath)
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalf("could not create config: %s", err.Error())
 		}
 	} else {
-		// config exists
-		r, err = repo.Open()
+		config_path := path.Join(opts.ConfigPath, opts.ConfigFile)
+		_, err := config.CreateInteractive(config_path)
 		if err != nil {
-			log.Fatalf(err.Error())
+			log.Fatalf("could not create config: %s", err.Error())
 		}
 	}
+}
 
-	config_string, err := yaml.Marshal(r.Config)
-	if err != nil {
-		log.Fatalf("could not circularize the parsing: %v", err) // TODO: obviously this goes away
-	}
+func action_create_package(ctx *cli.Context) {
+	panic("create_package command not implemented")
+}
 
-	fmt.Printf("%s", config_string)
+func action_install(ctx *cli.Context) {
+	panic("install command not implemented")
+}
+
+func action_update(ctx *cli.Context) {
+	panic("update command not implemented")
+}
+
+func action_pull(ctx *cli.Context) {
+	panic("pull command not implemented")
+}
+
+func action_upgrade(ctx *cli.Context) {
+	panic("upgrade command not implemented")
+}
+
+func action_save(ctx *cli.Context) {
+	panic("save command not implemented")
+}
+
+func action_tag(ctx *cli.Context) {
+	panic("tag command not implemented")
 }
