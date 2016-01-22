@@ -7,6 +7,7 @@ import (
 	"path"
 
 	"github.com/zmarcantel/hearth/config"
+	"github.com/zmarcantel/hearth/repository"
 
 	"github.com/codegangsta/cli"
 )
@@ -32,8 +33,13 @@ func print_install(indent string, conf config.InstallConfig) {
 	}
 }
 
-func action_cli(ctx *cli.Context) {
-	config_path := path.Join(opts.ConfigPath, opts.ConfigFile)
+//==================================================
+// default action
+//==================================================
+
+// TODO: what should this be?
+func action_default(ctx *cli.Context) {
+	config_path := config.Path()
 
 	// load the config
 	conf, err := config.Load(config_path)
@@ -49,51 +55,184 @@ func action_cli(ctx *cli.Context) {
 		print_install("\t", env.Install)
 	}
 
+	// TODO: better default action!!!
 	for name, app := range conf.Configs {
 		fmt.Printf("Installing App: %s\n", name)
 		print_install("\t", app.Install)
 	}
 }
 
-func action_create_config(ctx *cli.Context) {
-	if ctx.IsSet("config-path") || ctx.IsSet("config-file") || ctx.IsSet("repo") {
-		_, err := config.Create(opts.ConfigPath, opts.ConfigFile, opts.RepoPath)
+//==================================================
+// init action
+//==================================================
+func action_init(ctx *cli.Context) {
+	// get the default repo path (overwritten below) and the forced config path
+	repo_path := repository.DefaultPath()
+	config_final_path := config.Path()
+
+	// if the user wants a different repo, let them
+	if ctx.IsSet("repo") {
+		repo_path = opts.RepoPath
+	}
+
+	// create the repo (and starter config + any misc files)
+	repo, err := repository.Create(repo_path, opts.RepoOrigin)
+	if err != nil {
+		log.Fatalf("could not initialize repository: %s", err.Error())
+	}
+
+	// symlink {REPO_DIR}/.hearthrc --> $HOME/.hearthrc
+	config_src_path := path.Join(repo.Path, config.Name)
+	if err := os.Symlink(config_src_path, config_final_path); err != nil {
+		log.Fatalf("could not link hearth config into home directory: %s", err.Error())
+	}
+}
+
+//==================================================
+// create action
+//==================================================
+func action_create_package(ctx *cli.Context) {
+	// check our args are in bound, break them out in vars for later flexibility
+	max_args := 1
+	num_args := len(ctx.Args())
+	if num_args > max_args {
+		log.Fatalf("too many arguments/packages (%d), max=%d", len(ctx.Args()), max_args)
+	} else if num_args == 0 {
+		log.Fatal("no package name provided")
+	}
+
+	// get the config to read the repo directory
+	conf, err := config.Open()
+	if err != nil {
+		log.Fatalf("could not open config: %s", err.Error())
+	}
+
+	// check the package does not already exist
+	package_name := ctx.Args()[0]
+	package_path := path.Join(conf.BaseDirectory, package_name)
+	if _, err := os.Stat(package_name); err == nil {
+
+	}
+
+	// create the dir
+	err = os.Mkdir(package_path, 0755) // TODO: right perms?
+	if err != nil {
+		log.Fatalf("could not create package: %s", err.Error())
+	}
+
+	// create a file if asked
+	if file_name := ctx.String("file"); file_name != "" {
+		file_path := path.Join(package_path, file_name)
+		f, err := os.Create(file_path)
 		if err != nil {
-			log.Fatalf("could not create config: %s", err.Error())
+			log.Fatalf("could not create initial file: %s", file_path)
 		}
-	} else {
-		config_path := path.Join(opts.ConfigPath, opts.ConfigFile)
-		_, err := config.CreateInteractive(config_path)
-		if err != nil {
-			log.Fatalf("could not create config: %s", err.Error())
+
+		// if we need to make exec...
+		if ctx.Bool("exec") {
+			// get current perms. could be os dependent on creation
+			s, err := f.Stat()
+			if err != nil {
+				log.Fatalf("error getting file data after creation: %s", err.Error())
+			}
+
+			// OR the existing mode with executable for all users
+			// TODO: for all users?
+			if err := f.Chmod(s.Mode() | os.FileMode(0111)); err != nil {
+				log.Fatalf("could not makefile executable: %s", err.Error())
+			}
 		}
 	}
 }
 
-func action_create_package(ctx *cli.Context) {
-	panic("create_package command not implemented")
-}
-
+//==================================================
+// install action
+//==================================================
 func action_install(ctx *cli.Context) {
 	panic("install command not implemented")
 }
 
+//==================================================
+// install action
+//==================================================
 func action_update(ctx *cli.Context) {
 	panic("update command not implemented")
 }
 
+//==================================================
+// pull action
+//==================================================
 func action_pull(ctx *cli.Context) {
 	panic("pull command not implemented")
 }
 
+//==================================================
+// upgrade action
+//==================================================
 func action_upgrade(ctx *cli.Context) {
 	panic("upgrade command not implemented")
 }
 
+//==================================================
+// save action
+//==================================================
 func action_save(ctx *cli.Context) {
-	panic("save command not implemented")
+	repo, err := repository.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	origin, err := repo.Repo.Remotes.Lookup("origin")
+	if err != nil {
+		log.Fatal("remote:origin does not exist in repository")
+	}
+
+	sig, err := repo.Repo.DefaultSignature()
+	if err != nil {
+		log.Fatalf("could not get signature for commit: %s", err.Error())
+	}
+
+	// TODO: use deltas to auto-gen commit message as default
+	msg := ctx.String("message")
+	if msg == "" {
+		log.Fatalf("a commit message is currently required")
+	}
+
+	idx, err := repo.Repo.Index()
+	if err != nil {
+		log.Fatalf("could not get repo index: %s", err.Error())
+	}
+
+	err = idx.AddByPath(".")
+	if err != nil {
+		log.Fatalf("could not add files to commit: %s", err.Error())
+	}
+
+	tree_id, err := idx.WriteTree()
+	if err != nil {
+		log.Fatalf("could not write tree to repo: %s", err.Error())
+	}
+
+	tree, err := repo.Repo.LookupTree(tree_id)
+	if err != nil {
+		log.Fatalf("could not get commit's tree: %s", err.Error())
+	}
+
+	_, err = repo.Repo.CreateCommit("HEAD", sig, sig, msg, tree)
+	if err != nil {
+		log.Fatalf("could not create commit: %s", err.Error())
+	}
+
+	// TODO: not master
+	err = origin.Push([]string{"refs/heads/master"}, nil)
+	if err != nil {
+		log.Fatalf("fialed to push: %s", err.Error())
+	}
 }
 
+//==================================================
+// tag action
+//==================================================
 func action_tag(ctx *cli.Context) {
 	panic("tag command not implemented")
 }

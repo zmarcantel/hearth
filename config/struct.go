@@ -78,10 +78,10 @@ func (e *EnvironmentMap) UnmarshalYAML(unmarshal func(interface{}) error) error 
 //==================================================
 
 type ConfigSection struct {
-	Name     string        `yaml:"-"`
-	StowArgs string        `yaml:"stow_args,omitempty"`
-	Update   UpdateConfig  `yaml:"update,omitempty"`
-	Install  InstallConfig `yaml:"install,omitempty"`
+	Name    string        `yaml:"-"`
+	Update  UpdateConfig  `yaml:",omitempty"`
+	Install InstallConfig `yaml:",omitempty"` // mutually exclusive with Target
+	Target  string        `yaml:",omitempty"` // mutually exclusive with Install
 }
 
 type ConfigMap map[string]ConfigSection

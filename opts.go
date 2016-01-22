@@ -17,9 +17,8 @@ const (
 
 type Options struct {
 	// working environment
-	ConfigFile string
-	ConfigPath string
 	RepoPath   string
+	RepoOrigin string
 
 	// package creation
 	StartWithEditor bool
@@ -64,11 +63,25 @@ func init_flags() *cli.App {
 		//==================================================
 		{
 			Name:        "init",
-			Usage:       "creates a config file and initial git repository (interactive unless -p/-f/-r supplied)",
-			Description: "creates a config file and initial git repository (interactive unless -p/-f/-r supplied)",
-			Flags:       []cli.Flag{},
-			Action:      action_create_config,
+			Usage:       "creates a config file and initial git repository",
+			Description: "creates a config file and initial git repository",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:        "r, repo",
+					Usage:       "use a directory other than $HOME/.hearth to contain the repo",
+					Value:       path.Join(os.Getenv("HOME"), ".hearth"),
+					Destination: &opts.RepoPath,
+				},
+				cli.StringFlag{
+					Name:        "o, origin",
+					Usage:       "use the given URL/path as the git repo's origin (or, manually add later)",
+					Value:       "",
+					Destination: &opts.RepoOrigin,
+				},
+			},
+			Action: action_init,
 		},
+
 		//==================================================
 		// create
 		//==================================================
@@ -79,13 +92,13 @@ func init_flags() *cli.App {
 			Action:      action_create_package,
 			Flags: []cli.Flag{
 				cli.BoolFlag{
-					Name:        "edit",
+					Name:        "e, edit",
 					Usage:       "open the given file [default: main.sh] in the new package",
 					Destination: &opts.StartWithEditor,
 				},
 				cli.StringFlag{
-					Name:        "file",
-					Usage:       "name of the main file to create in the package",
+					Name:        "f, file",
+					Usage:       "create a file with the given name in the package",
 					Destination: &opts.InitPackageFile,
 				},
 				cli.BoolFlag{
@@ -95,6 +108,7 @@ func init_flags() *cli.App {
 				},
 			},
 		},
+
 		//==================================================
 		// install
 		//==================================================
@@ -126,6 +140,7 @@ func init_flags() *cli.App {
 				},
 			},
 		},
+
 		//==================================================
 		// update
 		//==================================================
@@ -157,6 +172,7 @@ func init_flags() *cli.App {
 				},
 			},
 		},
+
 		//==================================================
 		// pull
 		//==================================================
@@ -178,6 +194,7 @@ func init_flags() *cli.App {
 				},
 			},
 		},
+
 		//==================================================
 		// upgrade
 		//==================================================
@@ -187,13 +204,14 @@ func init_flags() *cli.App {
 			Description: "alias of 'pull --install --update'",
 			Action:      action_upgrade,
 		},
+
 		//==================================================
 		// save
 		//==================================================
 		{
 			Name:        "save",
-			Usage:       "create a commit message (or use default) and push to 'origin'",
-			Description: "create a commit message (or use default) and push to 'origin'",
+			Usage:       "create a commit (or use default) and push to 'origin'",
+			Description: "create a commit (or use default) and push to 'origin'",
 			Action:      action_save,
 			Flags: []cli.Flag{
 				cli.BoolFlag{
@@ -208,6 +226,7 @@ func init_flags() *cli.App {
 				},
 			},
 		},
+
 		//==================================================
 		// tag
 		//==================================================
@@ -219,28 +238,7 @@ func init_flags() *cli.App {
 		},
 	}
 
-	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:        "f, config-file",
-			Usage:       "use a name other than .hearthrc when looking for config",
-			Value:       ".hearthrc",
-			Destination: &opts.ConfigFile,
-		},
-		cli.StringFlag{
-			Name:        "p, config-path",
-			Usage:       "use a directory other than $HOME when looking for config",
-			Value:       os.Getenv("HOME"),
-			Destination: &opts.ConfigPath,
-		},
-		cli.StringFlag{
-			Name:        "r, repo",
-			Usage:       "use a directory other than $HOME/.hearth to contain the repo",
-			Value:       path.Join(os.Getenv("HOME"), ".hearth"),
-			Destination: &opts.RepoPath,
-		},
-	}
-
-	app.Action = action_cli
+	app.Action = action_default
 
 	return app
 }

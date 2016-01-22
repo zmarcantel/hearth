@@ -25,5 +25,4 @@ configs:
     thing:
         update:
             directory: "chmod 400 $HEARTH_DIR"
-        stow_args: "some --set of -- args"
-        target_dir: /etc/the_thing
+        target: ~
