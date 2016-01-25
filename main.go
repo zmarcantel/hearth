@@ -39,12 +39,10 @@ func print_install(indent string, conf config.InstallConfig) {
 
 // TODO: what should this be?
 func action_default(ctx *cli.Context) {
-	config_path := config.Path()
-
 	// load the config
-	conf, err := config.Load(config_path)
+	conf, err := config.Open()
 	if os.IsNotExist(err) {
-		log.Fatalf("failed to load hearth config from [%s], please use the create command to make one", config_path)
+		log.Fatalf("failed to load hearth config from [%s], please use the create command to make one", config.Path())
 	} else if err != nil {
 		log.Fatalf("could not read/load config file: %s", err.Error())
 	}
@@ -182,51 +180,18 @@ func action_save(ctx *cli.Context) {
 		log.Fatal(err)
 	}
 
-	origin, err := repo.Repo.Remotes.Lookup("origin")
-	if err != nil {
-		log.Fatal("remote:origin does not exist in repository")
-	}
-
-	sig, err := repo.Repo.DefaultSignature()
-	if err != nil {
-		log.Fatalf("could not get signature for commit: %s", err.Error())
-	}
-
-	// TODO: use deltas to auto-gen commit message as default
 	msg := ctx.String("message")
-	if msg == "" {
-		log.Fatalf("a commit message is currently required")
-	}
-
-	idx, err := repo.Repo.Index()
+	c, err := repo.CommitAll(msg)
 	if err != nil {
-		log.Fatalf("could not get repo index: %s", err.Error())
+		log.Fatal(err)
 	}
+	defer c.Free()
 
-	err = idx.AddByPath(".")
-	if err != nil {
-		log.Fatalf("could not add files to commit: %s", err.Error())
-	}
-
-	tree_id, err := idx.WriteTree()
-	if err != nil {
-		log.Fatalf("could not write tree to repo: %s", err.Error())
-	}
-
-	tree, err := repo.Repo.LookupTree(tree_id)
-	if err != nil {
-		log.Fatalf("could not get commit's tree: %s", err.Error())
-	}
-
-	_, err = repo.Repo.CreateCommit("HEAD", sig, sig, msg, tree)
-	if err != nil {
-		log.Fatalf("could not create commit: %s", err.Error())
-	}
-
-	// TODO: not master
-	err = origin.Push([]string{"refs/heads/master"}, nil)
-	if err != nil {
-		log.Fatalf("fialed to push: %s", err.Error())
+	if ctx.IsSet("no-push") == false {
+		err = repo.Push("master") // TODO: not only master
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 

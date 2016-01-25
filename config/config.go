@@ -15,9 +15,8 @@ func Path() string {
 	return path.Join(os.Getenv("HOME"), Name)
 }
 
-// Opens the ~/.hearthrc file.
-// If this file does not exist, an interactive prompt begins that will attempt to create
-// one. Because this function is integral to startup, we pass back a return code.
+// Opens the ~/.hearthrc file. This fille cannot change nor be moved
+// so this function is really a convenience function
 func Open() (Config, error) {
 	var config Config
 	default_file := Path()
@@ -36,20 +35,25 @@ func Open() (Config, error) {
 	return config, nil
 }
 
-func Create(conf_path, repo_path string) (Config, error) {
+// Creates a new config inside the given repo_path.
+// While it may be tempting to use this to create a config anywhere you want,
+// the de facto usage requires it to be made inside a repo
+func Create(repo_path string) (Config, error) {
 	var config Config
 	config.BaseDirectory = repo_path
+	conf_path := path.Join(repo_path, Name)
 
 	if _, err := os.Stat(conf_path); err == nil {
 		return config, fmt.Errorf("%s already exists, and will not overwrite.", conf_path)
 	}
 
 	// write the config file out
-	return config, Write(conf_path, config)
+	return config, config.Write(conf_path)
 }
 
-func Write(path string, conf Config) error {
-	config_bytes, err := yaml.Marshal(conf)
+// Write the config file to the given path
+func (c Config) Write(path string) error {
+	config_bytes, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("could not marshal new config: %s", err.Error())
 	}
@@ -60,15 +64,4 @@ func Write(path string, conf Config) error {
 	}
 
 	return nil
-}
-
-func Load(path string) (Config, error) {
-	// check if we have a config file
-	config_bytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		return Config{}, err
-	}
-
-	var config Config
-	return config, yaml.Unmarshal(config_bytes, &config)
 }
