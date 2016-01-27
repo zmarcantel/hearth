@@ -36,9 +36,13 @@ func create_repo(origin string, t *testing.T) Repository {
 	return repo
 }
 
-func create_origin_repo(t *testing.T) (Repository, string) {
+func temp_dir() string {
 	rand.Seed(time.Now().UnixNano())
-	repo_path := path.Join(os.TempDir(), strconv.FormatUint(uint64(rand.Int63()), 10))
+	return path.Join(os.TempDir(), strconv.FormatUint(uint64(rand.Int63()), 10))
+}
+
+func create_origin_repo(t *testing.T) (Repository, string) {
+	repo_path := temp_dir()
 
 	r, err := git.InitRepository(repo_path, true)
 	if err != nil {
@@ -46,6 +50,22 @@ func create_origin_repo(t *testing.T) (Repository, string) {
 	}
 
 	return Repository{r, repo_path, config.Config{}}, repo_path
+}
+
+func make_filled_dir(repo Repository, files int, t *testing.T) {
+	dir, err := ioutil.TempDir(repo.Path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// make some new files
+	for f := 0; f < files; f += 1 {
+		file, err := ioutil.TempFile(dir, "")
+		if err != nil {
+			t.Fatalf("could not create tempfile: %s", err.Error())
+		}
+		file.Close()
+	}
 }
 
 func TestCreate_DirectoryCreated(t *testing.T) {
@@ -117,26 +137,48 @@ func TestCommitThenPush(t *testing.T) {
 	defer os.RemoveAll(repo.Path)
 
 	num_files := 5
-	num_directories := 3
-	num_commits := uint(10)
+	num_commits := 10
 
-	for i := uint(0); i < num_commits; i += 1 {
-		// make new directories
-		for d := 0; d < num_directories; d += 1 {
-			dir, err := ioutil.TempDir(repo.Path, "")
-			if err != nil {
-				t.Fatal(err)
-			}
+	for i := 0; i < num_commits; i += 1 {
+		make_filled_dir(repo, num_files, t)
 
-			// make some new files
-			for f := 0; f < num_files; f += 1 {
-				file, err := ioutil.TempFile(dir, "")
-				if err != nil {
-					t.Fatalf("could not create tempfile: %s", err.Error())
-				}
-				file.Close()
-			}
+		// commit and push
+		commit_message := fmt.Sprintf("commit #%d", i)
+		c, err := repo.CommitAndPush(commit_message, "master")
+		if err != nil {
+			t.Fatal(err)
 		}
+		defer c.Free()
+
+		// check that origin has i+1 commits
+		expect := i + 1
+		count, err := origin.CommitCount()
+		if err != nil {
+			t.Fatalf("could not count commits: %s", err.Error())
+		}
+		if count != uint64(expect) {
+			t.Fatalf("expected %d commits after commit #%d, but found %d", expect, i, count)
+		}
+	}
+}
+
+func TestPull(t *testing.T) {
+	origin, origin_path := create_origin_repo(t)
+	repo := create_repo(origin_path, t)
+	test_repo_path := temp_dir()
+
+	defer os.RemoveAll(origin_path)
+	defer os.RemoveAll(repo.Path)
+	defer os.RemoveAll(test_repo_path)
+	defer origin.Free()
+	defer repo.Free()
+
+	num_files := 5
+	num_commits := 10
+
+	var test_repo Repository
+	for i := 0; i < num_commits; i += 1 {
+		make_filled_dir(repo, num_files, t)
 
 		// commit and push
 		commit_message := fmt.Sprintf("commit #%d", i)
@@ -156,5 +198,51 @@ func TestCommitThenPush(t *testing.T) {
 			t.Fatalf("expected %d commits after commit #%d, but found %d", expect, i, count)
 		}
 
+		if i == num_commits/2 {
+			test_repo, err = Clone(test_repo_path, origin_path)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	defer test_repo.Free()
+
+	// check we have comm/2 commites
+	count, err := test_repo.CommitCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != uint64(num_commits/2)+1 {
+		t.Fatalf("expected test repo to have %d commits but has %d", (num_commits/2)+1, count)
+	}
+
+	// pull
+	err = test_repo.Pull()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// check we have num_commit commits
+	count, err = test_repo.CommitCount()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != uint64(num_commits)+1 {
+		t.Fatalf("expected test repo to have %d commits but has %d", num_commits+1, count)
+	}
+
+	files, err := ioutil.ReadDir(test_repo.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dirs := 0
+	for _, f := range files {
+		if f.IsDir() {
+			dirs += 1
+		}
+	}
+	if dirs != num_commits {
+		t.Fatalf("expected test repo to have %d directories but has %d", num_commits, dirs)
 	}
 }

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -42,6 +43,20 @@ func Open() (Repository, error) {
 	return repo, nil
 }
 
+func Clone(path, repository string) (Repository, error) {
+	repo_raw, err := git.Clone(repository, path, &git.CloneOptions{})
+	if err != nil {
+		return Repository{}, err
+	}
+
+	repo := Repository{repo_raw, path, config.Config{}}
+	if err := repo.InitFiles(); err != nil {
+		return repo, err
+	}
+
+	return repo, nil
+}
+
 // Create a new repository in the given path and fill it with a remote:origin if given.
 // This also creates the hearth config (and all other InitFiles()) in the repo.
 func Create(path, origin string) (Repository, error) {
@@ -55,7 +70,7 @@ func Create(path, origin string) (Repository, error) {
 	}
 	repo := Repository{repo_raw, path, config.Config{}}
 
-	if err := InitFiles(&repo); err != nil {
+	if err := repo.InitFiles(); err != nil {
 		return repo, err
 	}
 
@@ -73,11 +88,11 @@ func Create(path, origin string) (Repository, error) {
 
 // Creates the needed (or later, wanted) files in a repository. Primarily, this is
 // used for generating a config on creation of a new repo
-func InitFiles(repo *Repository) error {
-	config_path := path.Join(repo.Path, config.Name) // we create the config inside the repo
-	repo.Config.BaseDirectory = repo.Path            // save the path in the config
+func (r *Repository) InitFiles() error {
+	config_path := path.Join(r.Path, config.Name) // we create the config inside the repo
+	r.Config.BaseDirectory = r.Path               // save the path in the config
 
-	return repo.Config.Write(config_path)
+	return r.Config.Write(config_path)
 }
 
 // Truthy function on whether the repository has the given package or not.
@@ -176,6 +191,7 @@ func (r Repository) Push(branch string) error {
 	if err != nil {
 		log.Fatal("remote:origin does not exist in repository")
 	}
+	defer origin.Free()
 
 	// TODO: sanitize the branch
 	branch = path.Join("refs/heads/", branch)
@@ -218,6 +234,152 @@ func (r Repository) CommitCount() (uint64, error) {
 	})
 
 	return count, nil
+}
+
+func credentialsCallback(url, username string, allowedTypes git.CredType) (git.ErrorCode, *git.Cred) {
+	ret, cred := git.NewCredSshKeyFromAgent(username)
+	code := git.ErrorCode(ret)
+
+	// TODO: get user:pass in cli.... add as args?
+
+	return code, &cred // TODO: return ptr? seems weird
+}
+
+func certificateCheckCallback(cert *git.Certificate, valid bool, hostname string) git.ErrorCode {
+	// TODO: !!!!!!!!!!!!!!!!
+	return git.ErrorCode(0)
+}
+
+func completionCallback(remote git.RemoteCompletion) git.ErrorCode {
+	fmt.Println(remote)
+	return git.ErrOk
+}
+
+func (r Repository) Pull() error {
+	origin, err := r.Remotes.Lookup("origin")
+	if err != nil {
+		return err
+	}
+	defer origin.Free()
+
+	fetch_opts := git.FetchOptions{
+		Prune:           git.FetchPruneUnspecified,
+		DownloadTags:    git.DownloadTagsAll,
+		UpdateFetchhead: true,
+		RemoteCallbacks: git.RemoteCallbacks{
+			CredentialsCallback:      credentialsCallback,
+			CertificateCheckCallback: certificateCheckCallback,
+			CompletionCallback:       completionCallback,
+		},
+	}
+
+	err = origin.Fetch([]string{"refs/heads/master"}, &fetch_opts, "") // TODO: do not assume master
+	if err != nil {
+		return err
+	}
+
+	remoteBranch, err := r.References.Lookup("refs/remotes/origin/master") // TODO: do not assume master
+	if err != nil {
+		return err
+	}
+
+	head, err := r.Head()
+	if err != nil {
+		return err
+	}
+
+	remoteBranchID := remoteBranch.Target()
+	annotatedCommit, err := r.AnnotatedCommitFromRef(remoteBranch)
+	if err != nil {
+		return err
+	}
+
+	// Do the merge analysis
+	mergeHeads := make([]*git.AnnotatedCommit, 1)
+	mergeHeads[0] = annotatedCommit
+	analysis, _, err := r.MergeAnalysis(mergeHeads)
+	if err != nil {
+		return err
+	}
+
+	// nothing to do
+	if analysis&git.MergeAnalysisUpToDate != 0 {
+		fmt.Println("ALready up to date.")
+		return nil
+	} else if analysis&git.MergeAnalysisNormal != 0 {
+		// Just merge changes
+		if err := r.Merge([]*git.AnnotatedCommit{annotatedCommit}, nil, nil); err != nil {
+			return err
+		}
+		// Check for conflicts
+		index, err := r.Index()
+		if err != nil {
+			return err
+		}
+
+		if index.HasConflicts() {
+			// TODO: list the conflicting files
+			return errors.New("Conflicts encountered. Please resolve them.")
+		}
+
+		// Make the merge commit
+		sig, err := r.DefaultSignature()
+		if err != nil {
+			return err
+		}
+
+		// Get Write Tree
+		treeId, err := index.WriteTree()
+		if err != nil {
+			return err
+		}
+
+		tree, err := r.LookupTree(treeId)
+		if err != nil {
+			return err
+		}
+
+		localCommit, err := r.LookupCommit(head.Target())
+		if err != nil {
+			return err
+		}
+
+		remoteCommit, err := r.LookupCommit(remoteBranchID)
+		if err != nil {
+			return err
+		}
+
+		r.CreateCommit("HEAD", sig, sig, "", tree, localCommit, remoteCommit)
+
+		// Clean up
+		r.StateCleanup()
+	} else if analysis&git.MergeAnalysisFastForward != 0 {
+		// Fast-forward changes
+		// Get remote tree
+		remoteTree, err := r.LookupTree(remoteBranchID)
+		if err != nil {
+			return err
+		}
+
+		// Checkout
+		if err := r.CheckoutTree(remoteTree, nil); err != nil {
+			return err
+		}
+
+		branchRef, err := r.References.Lookup("refs/heads/master") // TODO: not just master
+		if err != nil {
+			return err
+		}
+
+		// Point branch to the object
+		branchRef.SetTarget(remoteBranchID, "")
+		if _, err := head.SetTarget(remoteBranchID, ""); err != nil {
+			return err
+		}
+
+	}
+
+	return nil
 }
 
 // Holds metadata and creates an action point for packages.

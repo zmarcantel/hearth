@@ -26,3 +26,5 @@ configs:
         update:
             directory: "chmod 400 $HEARTH_DIR"
         target: ~
+    system_service:
+        target: /etc

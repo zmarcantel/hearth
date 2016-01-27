@@ -78,6 +78,7 @@ func action_init(ctx *cli.Context) {
 	if err != nil {
 		log.Fatalf("could not initialize repository: %s", err.Error())
 	}
+	defer repo.Free()
 
 	// symlink {REPO_DIR}/.hearthrc --> $HOME/.hearthrc
 	config_src_path := path.Join(repo.Path, config.Name)
@@ -179,6 +180,7 @@ func action_save(ctx *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer repo.Free()
 
 	msg := ctx.String("message")
 	c, err := repo.CommitAll(msg)
