@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/zmarcantel/hearth/config"
 
@@ -133,11 +135,35 @@ func (r Repository) CommitAll(message string) (*git.Commit, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not get repo index: %s", err.Error())
 	}
+	defer idx.Free()
 
-	// basically, like running `git add --all .` in the repo directory
-	err = idx.AddAll([]string{r.Path}, git.IndexAddDefault, nil)
+	// walk the tree and add all files. essentially running `git add --all .` in the repo directory
+	err = filepath.Walk(r.Path, func(p string, i os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// do not add directories or anything in the .git folder
+		if i.IsDir() || strings.Contains(p, ".git") {
+			return nil
+		}
+
+		// we must add via relative path
+		relpath, err := filepath.Rel(r.Path, p)
+		if err != nil {
+			return err
+		}
+
+		// add to the new index
+		err = idx.AddByPath(relpath)
+		if err != nil {
+			return fmt.Errorf("could not add %s to commit: %s", p, err.Error())
+		}
+
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("could not add files to commit: %s", err.Error())
+		return nil, err
 	}
 
 	// finalize the diff tree
@@ -304,7 +330,7 @@ func (r Repository) Pull() error {
 
 	// nothing to do
 	if analysis&git.MergeAnalysisUpToDate != 0 {
-		fmt.Println("ALready up to date.")
+		fmt.Println("Already up to date.")
 		return nil
 	} else if analysis&git.MergeAnalysisNormal != 0 {
 		// Just merge changes
@@ -318,7 +344,15 @@ func (r Repository) Pull() error {
 		}
 
 		if index.HasConflicts() {
-			// TODO: list the conflicting files
+			iter, err := index.ConflictIterator()
+			if err != nil {
+				return fmt.Errorf("could not create iterator for conflicts: %s", err.Error())
+			}
+			defer iter.Free()
+
+			for entry, err := iter.Next(); err != nil; entry, err = iter.Next() {
+				fmt.Printf("CONFLICT: %s\n", entry.Our.Path)
+			}
 			return errors.New("Conflicts encountered. Please resolve them.")
 		}
 

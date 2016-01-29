@@ -6,7 +6,9 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,8 +54,30 @@ func create_origin_repo(t *testing.T) (Repository, string) {
 	return Repository{r, repo_path, config.Config{}}, repo_path
 }
 
-func make_filled_dir(repo Repository, files int, t *testing.T) {
-	dir, err := ioutil.TempDir(repo.Path, "")
+func repo_walk_counts(repo Repository) (dirs uint64, files uint64, err error) {
+	err = filepath.Walk(repo.Path, func(p string, i os.FileInfo, e error) error {
+		if e != nil {
+			return e
+		}
+
+		if p == repo.Path || strings.Contains(p, ".git") {
+			return nil
+		}
+
+		if i.IsDir() {
+			dirs += 1
+		} else {
+			files += 1
+		}
+
+		return nil
+	})
+
+	return
+}
+
+func make_filled_dir(path string, files int, t *testing.T) string {
+	dir, err := ioutil.TempDir(path, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +90,8 @@ func make_filled_dir(repo Repository, files int, t *testing.T) {
 		}
 		file.Close()
 	}
+
+	return dir
 }
 
 func TestCreate_DirectoryCreated(t *testing.T) {
@@ -140,7 +166,7 @@ func TestCommitThenPush(t *testing.T) {
 	num_commits := 10
 
 	for i := 0; i < num_commits; i += 1 {
-		make_filled_dir(repo, num_files, t)
+		make_filled_dir(repo.Path, num_files, t)
 
 		// commit and push
 		commit_message := fmt.Sprintf("commit #%d", i)
@@ -175,10 +201,15 @@ func TestPull(t *testing.T) {
 
 	num_files := 5
 	num_commits := 10
+	subdir_depth := 2
 
 	var test_repo Repository
+	var commit_path_iter string
 	for i := 0; i < num_commits; i += 1 {
-		make_filled_dir(repo, num_files, t)
+		commit_path_iter = make_filled_dir(repo.Path, num_files, t)
+		for d := 0; d < subdir_depth; d += 1 {
+			commit_path_iter = make_filled_dir(commit_path_iter, num_files, t)
+		}
 
 		// commit and push
 		commit_message := fmt.Sprintf("commit #%d", i)
@@ -231,18 +262,21 @@ func TestPull(t *testing.T) {
 		t.Fatalf("expected test repo to have %d commits but has %d", num_commits+1, count)
 	}
 
-	files, err := ioutil.ReadDir(test_repo.Path)
+	// get a count of directories and files in the repo
+	dirs, files, err := repo_walk_counts(test_repo)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	dirs := 0
-	for _, f := range files {
-		if f.IsDir() {
-			dirs += 1
-		}
+	// assert directory count
+	expect_dirs := uint64((num_commits * subdir_depth) + num_commits)
+	if dirs != expect_dirs {
+		t.Fatalf("expected test repo to have %d directories but has %d", expect_dirs, dirs)
 	}
-	if dirs != num_commits {
-		t.Fatalf("expected test repo to have %d directories but has %d", num_commits, dirs)
+
+	// assert file count
+	expect_files := uint64((expect_dirs * uint64(num_files)) + 1) // have to add the .hearthrc
+	if files != expect_files {
+		t.Fatalf("expected test repo to have %d files but has %d", expect_files, files)
 	}
 }
