@@ -190,16 +190,27 @@ type Info struct {
 }
 
 func (i Info) Install(wd string) error {
+	// if we have a target, then symlink and shortcircuit the rest of the install
+	if len(i.Target) > 0 {
+		if err := os.Symlink(wd, i.Target); err != nil {
+			log.Fatal(err)
+		}
+		return nil
+	}
+
+	// if we do not have a regular command, abort
 	if len(i.InstallCmd.Cmd) == 0 {
 		return nil
 	}
 
+	// save current dir and defer popping
 	pushd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer os.Chdir(pushd)
 
+	// move into the package directory
 	if err := os.Chdir(wd); err != nil {
 		return err
 	}
@@ -208,12 +219,14 @@ func (i Info) Install(wd string) error {
 }
 
 func (i Info) Update(wd string) error {
+	// save current dir and defer popping
 	pushd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer os.Chdir(pushd)
 
+	// move into the package directory
 	if err := os.Chdir(wd); err != nil {
 		return err
 	}
