@@ -5,9 +5,12 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 
 	"github.com/zmarcantel/hearth/config"
 	"github.com/zmarcantel/hearth/repository"
+	"github.com/zmarcantel/hearth/repository/pkg"
 
 	"github.com/codegangsta/cli"
 )
@@ -19,7 +22,7 @@ func main() {
 	}
 }
 
-func print_install(indent string, conf config.InstallPackage) {
+func print_install(indent string, conf pkg.Install) {
 	if conf.PreCmd != "" {
 		fmt.Printf("%s- %s\n", indent, conf.PreCmd)
 	}
@@ -50,7 +53,7 @@ func action_default(ctx *cli.Context) {
 	// TODO: better default action!!!
 	for name, p := range conf.Packages {
 		fmt.Printf("Installing App: %s\n", name)
-		print_install("\t", p.Install)
+		print_install("\t", p.InstallCmd)
 	}
 }
 
@@ -167,19 +170,53 @@ func action_pull(ctx *cli.Context) {
 		log.Fatal(err)
 	}
 
+	// get what was changed so we can run callbacks
 	changed, err := repo.ChangedInLastCommit()
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, path := range changed {
-		if !repo.IsPackage(path) {
+
+	cache := make(map[string]bool)
+
+	// iterate them
+	for _, changed_path := range changed {
+		// get the relpath of the path that was changed
+		pkg_name, err := filepath.Rel(repo.Path, changed_path)
+		if err != nil {
 			continue
 		}
 
-		if repo.CreatedInLast(path) && ctx.IsSet("install") {
-			// TODO: run install
+		// this relpath may be a file or down deep in the tree
+		// but strip it down to the package name
+		pkg_name = filepath.SplitList(pkg_name)[0]
+		pkg_name = strings.TrimRight(pkg_name, "/") // TODO: get generic separator
+
+		// skip if we have run the commands for this package already
+		if _, cached := cache[pkg_name]; cached {
+			continue
+		}
+		cache[pkg_name] = true
+
+		// skip this if not a package
+		pack, exists := repo.GetPackage(pkg_name)
+		if exists == false {
+			continue
+		}
+
+		// take either install or update action based on the created or
+		// modified status of the package in the commit
+		if repo.CreatedInLast(changed_path) && ctx.IsSet("install") {
+			err := pack.Install(path.Join(repo.Path, pkg_name))
+			if err != nil {
+				// TODO: give arg to not fatal on error
+				log.Fatal(err)
+			}
 		} else if ctx.IsSet("upgrade") {
-			// TODO: run upgrade
+			err := pack.Update(path.Join(repo.Path, pkg_name))
+			if err != nil {
+				// TODO: give arg to not fatal on error
+				log.Fatal(err)
+			}
 		}
 	}
 
@@ -189,7 +226,7 @@ func action_pull(ctx *cli.Context) {
 // upgrade action
 //==================================================
 func action_upgrade(ctx *cli.Context) {
-	panic("upgrade command not implemented")
+	panic("upgrade command not currently supported. Will be included after PR: https://github.com/codegangsta/cli/pull/234")
 }
 
 //==================================================

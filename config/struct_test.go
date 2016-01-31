@@ -3,6 +3,8 @@ package config
 import (
 	"testing"
 
+	"github.com/zmarcantel/hearth/repository/pkg"
+
 	"gopkg.in/yaml.v2"
 )
 
@@ -13,7 +15,7 @@ import (
 func TestInstallPackage_Unmarshal_String(t *testing.T) {
 	test := `this is my command`
 
-	var conf InstallPackage
+	var conf pkg.Install
 	err := yaml.Unmarshal([]byte(test), &conf)
 	if err != nil {
 		t.Error(err)
@@ -32,14 +34,14 @@ func TestInstallPackage_Unmarshal_String(t *testing.T) {
 	}
 }
 
-func TestInstallPackage_Unmarshal_List(t *testing.T) {
+func TestInstall_Unmarshal_List(t *testing.T) {
 	test := `
 pre: erp
 cmd: dmc
 post: tsop
 `
 
-	var conf InstallPackage
+	var conf pkg.Install
 	err := yaml.Unmarshal([]byte(test), &conf)
 	if err != nil {
 		t.Error(err)

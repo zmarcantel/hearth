@@ -123,14 +123,17 @@ func (r Repository) IsPackage(path string) bool {
 // Get the package information for the package with the given name.
 // Boolean in return is existence check.
 func (r Repository) GetPackage(name string) (pkg.Info, bool) {
-	src_path := path.Join(r.Path, name)
-	s, err := os.Stat(src_path)
+	if r.PackageExists(name) == false {
+		return pkg.Info{}, false
+	}
+
+	config, err := config.Open()
 	if err != nil {
 		return pkg.Info{}, false
 	}
 
-	result := pkg.Info{Name: name, InstalledPath: src_path}
-	return result, s.IsDir()
+	p, exists := config.Packages["name"]
+	return p, exists
 }
 
 // NOTE: eats errors
