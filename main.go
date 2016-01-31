@@ -19,7 +19,7 @@ func main() {
 	}
 }
 
-func print_install(indent string, conf config.InstallConfig) {
+func print_install(indent string, conf config.InstallPackage) {
 	if conf.PreCmd != "" {
 		fmt.Printf("%s- %s\n", indent, conf.PreCmd)
 	}
@@ -47,16 +47,10 @@ func action_default(ctx *cli.Context) {
 		log.Fatalf("could not read/load config file: %s", err.Error())
 	}
 
-	// have config
-	for name, env := range conf.Environments {
-		fmt.Printf("Installing Environment: %s\n", name)
-		print_install("\t", env.Install)
-	}
-
 	// TODO: better default action!!!
-	for name, app := range conf.Configs {
+	for name, p := range conf.Packages {
 		fmt.Printf("Installing App: %s\n", name)
-		print_install("\t", app.Install)
+		print_install("\t", p.Install)
 	}
 }
 

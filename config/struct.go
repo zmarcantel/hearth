@@ -75,7 +75,7 @@ func (c *PackageMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // Base structure
 //==================================================
 
-type Package struct {
+type Config struct {
 	BaseDirectory string `yaml:"directory"`
 	Packages      PackageMap
 }
