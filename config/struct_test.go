@@ -3,62 +3,8 @@ package config
 import (
 	"testing"
 
-	"github.com/zmarcantel/hearth/repository/pkg"
-
 	"gopkg.in/yaml.v2"
 )
-
-//==================================================
-// Install Packages
-//==================================================
-
-func TestInstallPackage_Unmarshal_String(t *testing.T) {
-	test := `this is my command`
-
-	var conf pkg.Install
-	err := yaml.Unmarshal([]byte(test), &conf)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if conf.Cmd != "this is my command" {
-		t.Errorf("wrong command: '%s'", conf.Cmd)
-	}
-
-	if conf.PreCmd != "" {
-		t.Error("should not have a pre-command")
-	}
-
-	if conf.PostCmd != "" {
-		t.Error("should not have a post-command")
-	}
-}
-
-func TestInstall_Unmarshal_List(t *testing.T) {
-	test := `
-pre: erp
-cmd: dmc
-post: tsop
-`
-
-	var conf pkg.Install
-	err := yaml.Unmarshal([]byte(test), &conf)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if conf.Cmd != "dmc" {
-		t.Errorf("wrong command: '%s'", conf.Cmd)
-	}
-
-	if conf.PreCmd != "erp" {
-		t.Errorf("wrong pre-command: '%s'", conf.PreCmd)
-	}
-
-	if conf.PostCmd != "tsop" {
-		t.Errorf("wrong post-command: '%s'", conf.PostCmd)
-	}
-}
 
 //==================================================
 // Package Map

@@ -127,12 +127,7 @@ func (r Repository) GetPackage(name string) (pkg.Info, bool) {
 		return pkg.Info{}, false
 	}
 
-	config, err := config.Open()
-	if err != nil {
-		return pkg.Info{}, false
-	}
-
-	p, exists := config.Packages["name"]
+	p, exists := r.Config.Packages["name"]
 	return p, exists
 }
 

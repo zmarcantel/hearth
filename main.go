@@ -145,14 +145,58 @@ func action_create_package(ctx *cli.Context) {
 // install action
 //==================================================
 func action_install(ctx *cli.Context) {
-	panic("install command not implemented")
+	args := ctx.Args()
+	if len(args) == 0 {
+		log.Fatalf("no package name given.")
+	}
+
+	repo, err := repository.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, p := range args {
+		pack, exists := repo.GetPackage(p)
+		if exists == false {
+			log.Fatalf("cannot install unknown package: %s", p)
+		}
+
+		fmt.Printf("[ install ] %s... ", p)
+		err := pack.Install(path.Join(repo.Path, p))
+		if err != nil {
+			log.Fatal(err) // TODO: allow skipping errors
+		}
+		fmt.Printf("done!\n")
+	}
 }
 
 //==================================================
-// install action
+// update action
 //==================================================
 func action_update(ctx *cli.Context) {
-	panic("update command not implemented")
+	args := ctx.Args()
+	if len(args) == 0 {
+		log.Fatalf("no package name given.")
+	}
+
+	repo, err := repository.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, p := range args {
+		pack, exists := repo.GetPackage(p)
+		if exists == false {
+			log.Fatalf("cannot install unknown package: %s", p)
+		}
+
+		fmt.Printf("[ update ] %s... ", p)
+		err := pack.Update(path.Join(repo.Path, p))
+		if err != nil {
+			log.Fatal(err) // TODO: allow skipping errors
+		}
+		fmt.Printf("done!\n")
+	}
 }
 
 //==================================================

@@ -1,11 +1,11 @@
 package pkg
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -20,9 +20,24 @@ type Install struct {
 	PostCmd string `yaml:"post,omitempty"`
 }
 
-func (i Install) RunAll() error {
+func (i Install) RunAll(wd string) error {
 	if len(i.Cmd) == 0 {
 		return nil
+	}
+
+	// save current dir and defer popping
+	pushd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.Chdir(pushd)
+
+	// sanitize the wd
+	//if filepath.IsAbs(wd
+
+	// move into the package directory
+	if err := os.Chdir(wd); err != nil {
+		return err
 	}
 
 	if len(i.PreCmd) > 0 {
@@ -53,15 +68,14 @@ func (i Install) run(cmd_str string) error {
 		cmd_raw = append(cmd_raw, "")
 	}
 
+	var out bytes.Buffer
 	cmd := exec.Command(cmd_raw[0], cmd_raw[1:]...)
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+
 	err := cmd.Run()
 	if err != nil {
-		out, out_err := cmd.Output()
-		if out_err != nil {
-			return err // just bail
-		}
-
-		fmt.Println(string(out))
+		fmt.Println(out.String())
 		return err
 	}
 
@@ -96,8 +110,14 @@ type Update struct {
 }
 
 func (u Update) RunAll(root string) error {
+	pushd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	defer os.Chdir(pushd)
+
 	if len(u.Once) != 0 {
-		if err := u.run(u.Once); err != nil {
+		if err := u.run(u.Once, root, ""); err != nil {
 			return err
 		}
 	}
@@ -107,37 +127,20 @@ func (u Update) RunAll(root string) error {
 			return err
 		}
 
-		if i.IsDir() {
-			pushd, err := os.Getwd()
+		// directory command
+		if i.IsDir() && len(u.Directory) != 0 {
+			if err := u.run(u.Directory, p, ""); err != nil {
+				return fmt.Errorf("could not run directory comand: %s", err.Error())
+			}
+		}
+
+		// file command
+		if i.IsDir() == false && len(u.File) != 0 {
 			if err != nil {
-				return err
-			}
-			defer os.Chdir(pushd)
-
-			// set the env for the command
-			wd := path.Join(root, i.Name())
-			err = os.Setenv("HEARTH_DIR", wd)
-			if err != nil {
-				return err
+				return fmt.Errorf("could not set hearth file env: %s", err.Error())
 			}
 
-			if err := os.Chdir(wd); err != nil {
-				return err
-			}
-
-			if len(u.Directory) != 0 {
-				if err := u.run(u.Directory); err != nil {
-					return fmt.Errorf("could not run directory comand: %s", err.Error())
-				}
-			}
-		} else if len(u.File) != 0 { // not a directory, and we have a per-file command
-			fpath := path.Join(root, i.Name())
-			err := os.Setenv("HEARTH_FILE", fpath)
-			if err != nil {
-				return err
-			}
-
-			if err := u.run(u.File); err != nil {
+			if err := u.run(u.File, filepath.Dir(p), p); err != nil {
 				return fmt.Errorf("could not run file comand: %s", err.Error())
 			}
 		}
@@ -147,24 +150,37 @@ func (u Update) RunAll(root string) error {
 
 }
 
-func (u Update) run(cmd_str string) error {
-	cmd_raw := strings.Split(cmd_str, " ")
-	if length := len(cmd_raw); length == 0 {
-		// TODO: hmmm can this happen?
-		return nil
-	} else if length == 1 {
-		cmd_raw = append(cmd_raw, "")
+func (u Update) run(cmd_str, wd, fname string) error {
+	// set env
+	if len(wd) > 0 {
+		if err := os.Setenv("HEARTH_DIR", wd); err != nil {
+			return err
+		}
+	}
+	if len(fname) > 0 {
+		if err := os.Setenv("HEARTH_FILE", fname); err != nil {
+			return err
+		}
 	}
 
-	cmd := exec.Command(cmd_raw[0], cmd_raw[1:]...)
+	// exapand.... exec has weird issues with expanding cmd.Env
+	cmd_str = os.ExpandEnv(cmd_str)
+	cmd_str = strings.TrimSpace(cmd_str)
+
+	cmd_array := []string{"-c", cmd_str}
+
+	// keep an output buffer
+	var out bytes.Buffer
+	cmd := exec.Command("/bin/bash", cmd_array...)
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	cmd.Env = os.Environ()
+	cmd.Dir = wd
+
+	// ... and go
 	err := cmd.Run()
 	if err != nil && u.IgnoreErrors == false {
-		out, out_err := cmd.Output()
-		if out_err != nil {
-			return err // just bail
-		}
-
-		fmt.Println(string(out))
+		fmt.Println(out.String())
 		return err
 	}
 
@@ -203,19 +219,7 @@ func (i Info) Install(wd string) error {
 		return nil
 	}
 
-	// save current dir and defer popping
-	pushd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.Chdir(pushd)
-
-	// move into the package directory
-	if err := os.Chdir(wd); err != nil {
-		return err
-	}
-
-	return i.InstallCmd.RunAll()
+	return i.InstallCmd.RunAll(wd)
 }
 
 func (i Info) Update(wd string) error {
