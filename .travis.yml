@@ -13,6 +13,8 @@ before_install:
     - cmake -DTHREADSAFE=ON -DBUILD_CLAR=OFF -DCMAKE_BUILD_TYPE="RelWithDebInfo" .. && make && sudo make install
     - sudo ldconfig
     - cd "${TRAVIS_BUILD_DIR}"
+    - git config --global user.name "test name"
+    - git config --global user.email "test@test.com"
 
 # install go dependencies
 install: make deps
