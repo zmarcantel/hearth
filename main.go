@@ -55,13 +55,19 @@ func action_default(ctx *cli.Context) {
 	err = diff.ForEach(func(delta git.DiffDelta, idk float64) (git.DiffForEachHunkCallback, error) {
 		// TODO: is the float percentage changed?
 
+		// if rename
 		if delta.OldFile.Path != delta.NewFile.Path {
 			// TODO: colored output based on delta.Similarity
 			fmt.Printf("[ renamed ] %s  -->  %s\n", delta.OldFile.Path, delta.NewFile.Path)
+		} else {
+			fmt.Printf("[ changed ] %s", delta.NewFile.Path)
 		}
 
 		return nil, nil
 	}, git.DiffDetailFiles)
+	if err != nil {
+		log.Fatalf("could not iterate diffs: %s", err.Error())
+	}
 }
 
 //==================================================
