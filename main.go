@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/libgit2/git2go"
 	"github.com/zmarcantel/hearth/config"
 	"github.com/zmarcantel/hearth/repository"
-	"github.com/zmarcantel/hearth/repository/pkg"
 
 	"github.com/codegangsta/cli"
 )
@@ -22,39 +22,46 @@ func main() {
 	}
 }
 
-func print_install(indent string, conf pkg.Install) {
-	if conf.PreCmd != "" {
-		fmt.Printf("%s- %s\n", indent, conf.PreCmd)
-	}
-
-	if conf.Cmd != "" {
-		fmt.Printf("%s- %s\n", indent, conf.Cmd)
-	}
-
-	if conf.PostCmd != "" {
-		fmt.Printf("%s- %s\n", indent, conf.PostCmd)
-	}
-}
-
 //==================================================
 // default action
 //==================================================
 
 // TODO: what should this be?
 func action_default(ctx *cli.Context) {
-	// load the config
-	conf, err := config.Open()
-	if os.IsNotExist(err) {
-		log.Fatalf("failed to load hearth config from [%s], please use the create command to make one", config.Path())
-	} else if err != nil {
-		log.Fatalf("could not read/load config file: %s", err.Error())
+	repo, err := repository.Open()
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	// TODO: better default action!!!
-	for name, p := range conf.Packages {
-		fmt.Printf("Installing App: %s\n", name)
-		print_install("\t", p.InstallCmd)
+	index, err := repo.Index()
+	if err != nil {
+		log.Fatalf("could not get index: %s", err.Error())
 	}
+	defer index.Free()
+
+	diff_opts := git.DiffOptions{
+		Flags:            git.DiffNormal,
+		IgnoreSubmodules: git.SubmoduleIgnoreAll,
+		Pathspec:         []string{repo.Path},
+		ContextLines:     4,
+	}
+
+	diff, err := repo.DiffIndexToWorkdir(index, &diff_opts)
+	if err != nil {
+		log.Fatalf("could not diff index to workdir: %s", err.Error())
+	}
+	defer diff.Free()
+
+	err = diff.ForEach(func(delta git.DiffDelta, idk float64) (git.DiffForEachHunkCallback, error) {
+		// TODO: is the float percentage changed?
+
+		if delta.OldFile.Path != delta.NewFile.Path {
+			// TODO: colored output based on delta.Similarity
+			fmt.Printf("[ renamed ] %s  -->  %s\n", delta.OldFile.Path, delta.NewFile.Path)
+		}
+
+		return nil, nil
+	}, git.DiffDetailFiles)
 }
 
 //==================================================
