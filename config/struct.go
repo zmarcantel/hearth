@@ -4,33 +4,33 @@ package config
 // Installation config
 //==================================================
 
-type InstallConfig struct {
+type InstallPackage struct {
 	PreCmd  string `yaml:"pre,omitempty"`
 	Cmd     string `yaml:"cmd,omitempty"`
 	PostCmd string `yaml:"post,omitempty"`
 }
 
-func (i InstallConfig) MarshalYAML() (interface{}, error) {
+func (i InstallPackage) MarshalYAML() (interface{}, error) {
 	return i.Cmd, nil
 }
 
-type installConfigUnmarshaler InstallConfig
+type installPackageUnmarshaler InstallPackage
 
-func (i *InstallConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (i *InstallPackage) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	as_str_err := unmarshal(&i.Cmd)
 	if as_str_err == nil {
 		return nil
 	}
 
 	// do like normal but avoid recursion
-	return unmarshal((*installConfigUnmarshaler)(i))
+	return unmarshal((*installPackageUnmarshaler)(i))
 }
 
 //==================================================
 // Update config
 //==================================================
 
-type UpdateConfig struct {
+type UpdatePackage struct {
 	Once         string `yaml:"once,omitempty"`
 	File         string `yaml:"file,omitempty"`
 	Directory    string `yaml:"directory,omitempty"`
@@ -39,57 +39,27 @@ type UpdateConfig struct {
 
 //
 // update config map
-type UpdateConfigMap map[string]UpdateConfig
+type UpdatePackageMap map[string]UpdatePackage
 
 // TODO: string-or-list like the install config
 
 //==================================================
-// Environment config
+// Package management
 //==================================================
 
-type Environment struct {
-	Name    string        `yaml:"-"`
-	Install InstallConfig `yaml:",omitempty"`
-	Update  UpdateConfig  `yaml:",omitempty"`
+type PackageSection struct {
+	Name    string         `yaml:"-"`
+	Update  UpdatePackage  `yaml:",omitempty"`
+	Install InstallPackage `yaml:",omitempty"` // mutually exclusive with Target
+	Target  string         `yaml:",omitempty"` // mutually exclusive with Install
 }
 
-//
-// environment map
+type PackageMap map[string]PackageSection
 
-type EnvironmentMap map[string]Environment
+func (c *PackageMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	*c = make(PackageMap)
 
-func (e *EnvironmentMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	// fill in e using a cast
-	if err := unmarshal((*map[string]Environment)(e)); err != nil {
-		return err
-	}
-
-	// iterate ourself and fill key->val.Name
-	for k, v := range *e {
-		v.Name = k
-		(*e)[k] = v
-	}
-
-	return nil
-}
-
-//==================================================
-// General config management
-//==================================================
-
-type ConfigSection struct {
-	Name    string        `yaml:"-"`
-	Update  UpdateConfig  `yaml:",omitempty"`
-	Install InstallConfig `yaml:",omitempty"` // mutually exclusive with Target
-	Target  string        `yaml:",omitempty"` // mutually exclusive with Install
-}
-
-type ConfigMap map[string]ConfigSection
-
-func (c *ConfigMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	*c = make(ConfigMap)
-
-	if err := unmarshal((*map[string]ConfigSection)(c)); err != nil {
+	if err := unmarshal((*map[string]PackageSection)(c)); err != nil {
 		return err
 	}
 
@@ -105,8 +75,7 @@ func (c *ConfigMap) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // Base structure
 //==================================================
 
-type Config struct {
-	BaseDirectory string         `yaml:"directory"`
-	Environments  EnvironmentMap //`yaml:",inline"`
-	Configs       ConfigMap      //`yaml:",omitempty"`
+type Package struct {
+	BaseDirectory string `yaml:"directory"`
+	Packages      PackageMap
 }

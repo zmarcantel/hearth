@@ -7,9 +7,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/zmarcantel/hearth/config"
+	"github.com/zmarcantel/hearth/repository/pkg"
 
 	git "github.com/libgit2/git2go"
 )
@@ -97,24 +99,126 @@ func (r *Repository) InitFiles() error {
 	return r.Config.Write(config_path)
 }
 
-// Truthy function on whether the repository has the given package or not.
+// Truthy function on whether the package exists on the filesystem.
 // Case sensitivity is that of the underlying filesystem.
-func (r Repository) HasPackage(name string) bool {
+func (r Repository) PackageExists(name string) bool {
 	s, err := os.Stat(path.Join(r.Path, name))
 	return err == nil && s.IsDir()
 }
 
+// Truth function on whether the given path is a package path
+func (r Repository) IsPackage(path string) bool {
+	if len(path) == 0 {
+		return false
+	}
+
+	rel, err := filepath.Rel(r.Path, path)
+	if err != nil {
+		return false
+	}
+
+	return rel == filepath.Base(path)
+}
+
 // Get the package information for the package with the given name.
 // Boolean in return is existence check.
-func (r Repository) GetPackage(name string) (PackageInfo, bool) {
+func (r Repository) GetPackage(name string) (pkg.Info, bool) {
 	src_path := path.Join(r.Path, name)
 	s, err := os.Stat(src_path)
 	if err != nil {
-		return PackageInfo{}, false
+		return pkg.Info{}, false
 	}
 
-	result := PackageInfo{Name: name, InstalledPath: src_path}
+	result := pkg.Info{Name: name, InstalledPath: src_path}
 	return result, s.IsDir()
+}
+
+// NOTE: eats errors
+// TODO: docs
+func (r Repository) ModifiedInLast(path string) bool {
+	var err error
+	if filepath.IsAbs(path) {
+		path, err = filepath.Rel(r.Path, path)
+		if err != nil {
+			return false
+		}
+	}
+
+	// check if even in last commit
+	changed, err := r.ChangedInLastCommit()
+	if err != nil {
+		return false
+	}
+	sort.StringSlice(changed).Sort()
+	if sort.SearchStrings(changed, path) == len(changed) {
+		return false
+	}
+
+	// get head
+	commit, err := r.HeadCommit()
+	if err != nil {
+		return false
+	}
+	defer commit.Free()
+
+	// then get parent
+	parent := commit.Parent(0)
+	if parent == nil {
+		return false
+	}
+	defer parent.Free()
+
+	// ... and the parent's tree
+	tree, err := parent.Tree()
+	if err != nil {
+		return false
+	}
+	defer tree.Free()
+
+	// if we can get the entry it was changed
+	_, err = tree.EntryByPath(path)
+	if err != nil {
+		return false
+	}
+
+	return true
+}
+
+// NOTE: eats errors
+// TODO: docs
+func (r Repository) CreatedInLast(path string) bool {
+	var err error
+	if filepath.IsAbs(path) {
+		path, err = filepath.Rel(r.Path, path)
+		if err != nil {
+			return false
+		}
+	}
+
+	// get commit at head
+	commit, err := r.HeadCommit()
+	if err != nil {
+		return false
+	}
+	defer commit.Free()
+
+	// and the parent
+	parent := commit.Parent(0)
+	if parent == nil {
+		return true // no parent == first commit == created
+	}
+	defer parent.Free()
+
+	// then get the tree
+	tree, err := parent.Tree()
+	if err != nil {
+		return false
+	}
+	defer tree.Free()
+
+	// if we cannot get the entry, the file was created
+	_, err = tree.EntryByPath(path)
+	return err != nil
 }
 
 // Essentially `git add --all .` in thre repo directory, and commit with the given message.
@@ -321,8 +425,7 @@ func (r Repository) Pull() error {
 	}
 
 	// Do the merge analysis
-	mergeHeads := make([]*git.AnnotatedCommit, 1)
-	mergeHeads[0] = annotatedCommit
+	mergeHeads := []*git.AnnotatedCommit{annotatedCommit}
 	analysis, _, err := r.MergeAnalysis(mergeHeads)
 	if err != nil {
 		return err
@@ -334,14 +437,16 @@ func (r Repository) Pull() error {
 		return nil
 	} else if analysis&git.MergeAnalysisNormal != 0 {
 		// Just merge changes
-		if err := r.Merge([]*git.AnnotatedCommit{annotatedCommit}, nil, nil); err != nil {
+		if err := r.Merge(mergeHeads, nil, nil); err != nil {
 			return err
 		}
+
 		// Check for conflicts
 		index, err := r.Index()
 		if err != nil {
 			return err
 		}
+		defer index.Free()
 
 		if index.HasConflicts() {
 			iter, err := index.ConflictIterator()
@@ -372,18 +477,24 @@ func (r Repository) Pull() error {
 		if err != nil {
 			return err
 		}
+		defer tree.Free()
 
 		localCommit, err := r.LookupCommit(head.Target())
 		if err != nil {
 			return err
 		}
+		defer localCommit.Free()
 
 		remoteCommit, err := r.LookupCommit(remoteBranchID)
 		if err != nil {
 			return err
 		}
+		defer remoteCommit.Free()
 
-		r.CreateCommit("HEAD", sig, sig, "", tree, localCommit, remoteCommit)
+		_, err = r.CreateCommit("HEAD", sig, sig, "", tree, localCommit, remoteCommit)
+		if err != nil {
+			return fmt.Errorf("could not create commit after merge: %s", err.Error())
+		}
 
 		// Clean up
 		r.StateCleanup()
@@ -416,8 +527,43 @@ func (r Repository) Pull() error {
 	return nil
 }
 
-// Holds metadata and creates an action point for packages.
-type PackageInfo struct {
-	Name          string
-	InstalledPath string
+func (r Repository) HeadCommit() (*git.Commit, error) {
+	head, err := r.Head()
+	if err != nil {
+		return nil, fmt.Errorf("could not get HEAD: %s", err.Error())
+	}
+	defer head.Free()
+
+	commit, err := r.LookupCommit(head.Target())
+	if err != nil {
+		return nil, fmt.Errorf("could not get commit for HEAD: %s", err.Error())
+	}
+
+	return commit, nil
+}
+
+// TODO: better name
+func (r Repository) ChangedInLastCommit() ([]string, error) {
+	commit, err := r.HeadCommit()
+	if err != nil {
+		return []string{}, err
+	}
+	defer commit.Free()
+
+	tree, err := commit.Tree()
+	if err != nil {
+		return []string{}, fmt.Errorf("could not get tree for commit: %s", err.Error())
+	}
+	defer tree.Free()
+
+	paths := make([]string, 0)
+	err = tree.Walk(func(dir string, entry *git.TreeEntry) int {
+		paths = append(paths, path.Join(dir, entry.Name))
+		return 0
+	})
+	if err != nil {
+		return []string{}, err
+	}
+
+	return paths, nil
 }

@@ -1,5 +1,5 @@
 directory: ~/.hearth
-environments:
+packages:
     base:
     work:
         install: install.sh
@@ -12,7 +12,6 @@ environments:
         update:
             once: "update.sh"
             file: chmod +x
-configs:
     vim:
         install: "mkdir -p ~/.vim/autoload ~/.vim/bundle && curl -LSso ~/.vim/autoload/pathogen.vim https://tpo.pe/pathogen.vim"
         update:

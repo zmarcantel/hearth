@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -43,6 +44,30 @@ func temp_dir() string {
 	return path.Join(os.TempDir(), strconv.FormatUint(uint64(rand.Int63()), 10))
 }
 
+func make_dir(prefix string, t *testing.T) string {
+	rand.Seed(time.Now().UnixNano())
+	path := path.Join(prefix, strconv.FormatUint(uint64(rand.Int63()), 10))
+
+	err := os.Mkdir(path, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return path
+}
+
+func make_file(prefix string, t *testing.T) string {
+	rand.Seed(time.Now().UnixNano())
+	path := path.Join(prefix, strconv.FormatUint(uint64(rand.Int63()), 10))
+
+	err := ioutil.WriteFile(path, []byte(path), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return path
+}
+
 func create_origin_repo(t *testing.T) (Repository, string) {
 	repo_path := temp_dir()
 
@@ -54,13 +79,13 @@ func create_origin_repo(t *testing.T) (Repository, string) {
 	return Repository{r, repo_path, config.Config{}}, repo_path
 }
 
-func repo_walk_counts(repo Repository) (dirs uint64, files uint64, err error) {
-	err = filepath.Walk(repo.Path, func(p string, i os.FileInfo, e error) error {
+func dir_walk_counts(path string) (dirs uint64, files uint64, err error) {
+	err = filepath.Walk(path, func(p string, i os.FileInfo, e error) error {
 		if e != nil {
 			return e
 		}
 
-		if p == repo.Path || strings.Contains(p, ".git") {
+		if p == path || strings.Contains(p, ".git") {
 			return nil
 		}
 
@@ -263,7 +288,7 @@ func TestPull(t *testing.T) {
 	}
 
 	// get a count of directories and files in the repo
-	dirs, files, err := repo_walk_counts(test_repo)
+	dirs, files, err := dir_walk_counts(test_repo.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,5 +303,138 @@ func TestPull(t *testing.T) {
 	expect_files := uint64((expect_dirs * uint64(num_files)) + 1) // have to add the .hearthrc
 	if files != expect_files {
 		t.Fatalf("expected test repo to have %d files but has %d", expect_files, files)
+	}
+}
+
+func TestChangesFiles(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	// make changes
+	num_files := 5
+	changed_paths := make([]string, 0)
+	base_path := make_dir(repo.Path, t) // first dir
+	changed_paths = append(changed_paths, base_path)
+	changed_paths = append(changed_paths, make_dir(base_path, t)) // second level
+
+	in_dir := changed_paths[len(changed_paths)-1]
+	for i := 0; i < num_files; i += 1 {
+		changed_paths = append(changed_paths, make_file(in_dir, t))
+	}
+
+	// commit
+	c, err := repo.CommitAll("test commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Free()
+
+	// check counts
+	expect := len(changed_paths) + 1 // .hearthrc
+	changed, err := repo.ChangedInLastCommit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed_count := len(changed)
+	if changed_count != expect {
+		t.Fatalf("expected %d changed files, got %d", expect, changed_count)
+	}
+
+	// we have to sort the array first :/
+	sort.StringSlice(changed_paths).Sort()
+
+	// make sure all files in changed are in our created list
+	for _, f := range changed {
+		actual := path.Join(repo.Path, f)
+		if sort.SearchStrings(changed_paths, actual) == len(changed_paths) {
+			t.Fatalf("%s not in the list of files we made", actual)
+		}
+	}
+}
+
+func TestIsPackage(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	is_pkg := path.Join(repo.Path, "this_is_a_package")
+	not_pkg := path.Join(repo.Path, "file_in/some_dir")
+	not_rel := "/var/log/hearth"
+
+	if repo.IsPackage(is_pkg) == false {
+		t.Errorf("did not think %s was a package", is_pkg)
+	}
+	if repo.IsPackage(not_pkg) {
+		t.Errorf("thought %s was a package", is_pkg)
+	}
+	if repo.IsPackage(not_rel) {
+		t.Errorf("thought %s was a package", is_pkg)
+	}
+}
+
+func TestModifiedInLast(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	f := make_file(repo.Path, t)
+
+	c, err := repo.CommitAll("test commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Free()
+
+	if repo.ModifiedInLast(filepath.Base(f)) {
+		t.Fatalf("modified, not created")
+	}
+
+	err = ioutil.WriteFile(f, []byte("some new info"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second_commit, err := repo.CommitAll("another commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second_commit.Free()
+
+	if repo.ModifiedInLast(filepath.Base(f)) == false {
+		t.Fatalf("did not consider it modified")
+	}
+}
+
+func TestCreatedInLast(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	f := make_file(repo.Path, t)
+
+	c, err := repo.CommitAll("test commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Free()
+
+	if repo.CreatedInLast(filepath.Base(f)) == false {
+		t.Fatalf("did not consider it created")
+	}
+
+	err = ioutil.WriteFile(f, []byte("some new info"), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second_commit, err := repo.CommitAll("another commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second_commit.Free()
+
+	if repo.CreatedInLast(filepath.Base(f)) {
+		t.Fatalf("considered created even when it was modified")
 	}
 }

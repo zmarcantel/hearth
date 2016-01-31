@@ -162,7 +162,33 @@ func action_update(ctx *cli.Context) {
 // pull action
 //==================================================
 func action_pull(ctx *cli.Context) {
-	panic("pull command not implemented")
+	repo, err := repository.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer repo.Free()
+
+	err = repo.Pull()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	changed, err := repo.ChangedInLastCommit()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, path := range changed {
+		if !repo.IsPackage(path) {
+			continue
+		}
+
+		if repo.CreatedInLast(path) && ctx.IsSet("install") {
+			// TODO: run install
+		} else if ctx.IsSet("upgrade") {
+			// TODO: run upgrade
+		}
+	}
+
 }
 
 //==================================================

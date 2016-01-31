@@ -7,13 +7,13 @@ import (
 )
 
 //==================================================
-// Install Configs
+// Install Packages
 //==================================================
 
-func TestInstallConfig_Unmarshal_String(t *testing.T) {
+func TestInstallPackage_Unmarshal_String(t *testing.T) {
 	test := `this is my command`
 
-	var conf InstallConfig
+	var conf InstallPackage
 	err := yaml.Unmarshal([]byte(test), &conf)
 	if err != nil {
 		t.Error(err)
@@ -32,14 +32,14 @@ func TestInstallConfig_Unmarshal_String(t *testing.T) {
 	}
 }
 
-func TestInstallConfig_Unmarshal_List(t *testing.T) {
+func TestInstallPackage_Unmarshal_List(t *testing.T) {
 	test := `
 pre: erp
 cmd: dmc
 post: tsop
 `
 
-	var conf InstallConfig
+	var conf InstallPackage
 	err := yaml.Unmarshal([]byte(test), &conf)
 	if err != nil {
 		t.Error(err)
@@ -59,10 +59,10 @@ post: tsop
 }
 
 //==================================================
-// Config Map
+// Package Map
 //==================================================
 
-func TestConfigMap_Unmarshal_NameInserted(t *testing.T) {
+func TestPackageMap_Unmarshal_NameInserted(t *testing.T) {
 	test := `
 first:
     stow_args: empty
@@ -74,7 +74,7 @@ third:
     stow_args: empty
 `
 
-	var conf ConfigMap
+	var conf PackageMap
 	err := yaml.Unmarshal([]byte(test), &conf)
 	if err != nil {
 		t.Error(err)
