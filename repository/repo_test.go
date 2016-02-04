@@ -438,3 +438,86 @@ func TestCreatedInLast(t *testing.T) {
 		t.Fatalf("considered created even when it was modified")
 	}
 }
+
+func TestNewBranch(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	// must have a commit to have a HEAD to have a branch :/
+	make_file(repo.Path, t)
+	c, err := repo.CommitAll("test commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Free()
+
+	// test branching
+	name := "test"
+
+	_, err = repo.NewBranch(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = repo.LookupBranch(name, git.BranchLocal)
+	if err != nil {
+		t.Fatalf("could not lookup new branch: %s", err.Error())
+	}
+}
+
+func TestCheckoutBranch(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	// must have a commit to have a HEAD to have a branch :/
+	make_file(repo.Path, t)
+	c, err := repo.CommitAll("test commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Free()
+
+	// test branching
+	name := "test"
+
+	branch, err := repo.NewBranch(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = repo.CheckoutBranch(branch)
+	if err != nil {
+		t.Fatalf("could not checkout branch: %s", err.Error())
+	}
+}
+
+func TestCheckoutBranchByName(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	// must have a commit to have a HEAD to have a branch :/
+	make_file(repo.Path, t)
+	c, err := repo.CommitAll("test commit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Free()
+
+	// test branching
+	name := "test"
+
+	_, err = repo.NewBranch(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = repo.CheckoutBranchByName(name)
+	if err != nil {
+		t.Fatalf("could not checkout branch: %s", err.Error())
+	}
+}
+
+// TODO: test checkout branch with dirty working directory

@@ -93,6 +93,7 @@ func init_flags() *cli.App {
 			Name:        "create",
 			Usage:       "create a new package, init files, and define its installation method",
 			Description: "create a new package, init files, and define its installation method",
+			ArgsUsage:   "package_name",
 			Action:      action_create_package,
 			Flags: []cli.Flag{
 				// creation flags
@@ -137,12 +138,25 @@ func init_flags() *cli.App {
 		},
 
 		//==================================================
+		// env
+		//==================================================
+		{
+			Name:        "env",
+			Usage:       "change the dotfile environment (git branch)",
+			Description: "change the dotfile environment (git branch)",
+			ArgsUsage:   "branch_name",
+			Flags:       []cli.Flag{},
+			Action:      action_env,
+		},
+
+		//==================================================
 		// install
 		//==================================================
 		{
 			Name:        "install",
 			Usage:       "install one or many packages",
 			Description: "install one or many packages",
+			ArgsUsage:   "package [package...]",
 			Action:      action_install,
 			Flags: []cli.Flag{
 				cli.BoolFlag{
@@ -175,6 +189,7 @@ func init_flags() *cli.App {
 			Name:        "update",
 			Usage:       "update one or many packages",
 			Description: "update one or many packages",
+			ArgsUsage:   "package [package...]",
 			Action:      action_update,
 			Flags: []cli.Flag{
 				cli.BoolFlag{

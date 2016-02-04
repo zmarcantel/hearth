@@ -565,3 +565,42 @@ func (r Repository) ChangedInLastCommit() ([]string, error) {
 
 	return paths, nil
 }
+
+// create a new branch in the repo
+func (r Repository) NewBranch(name string) (*git.Branch, error) {
+	commit, err := r.HeadCommit()
+	if err != nil {
+		return nil, err
+	}
+	defer commit.Free()
+
+	branch, err := r.CreateBranch(name, commit, false) // TODO: force?
+	if err != nil {
+		return nil, fmt.Errorf("could not create branch: %s", err.Error())
+	}
+
+	return branch, nil
+}
+
+func (r Repository) CheckoutBranch(b *git.Branch) error {
+	if b == nil {
+		return fmt.Errorf("nil branch reference")
+	}
+
+	// get branch's name
+	name, err := b.Name()
+	if err != nil {
+		return fmt.Errorf("could not get branch name: %s", err.Error())
+	}
+
+	return r.SetHead(fmt.Sprintf("refs/heads/%s", name))
+}
+
+func (r Repository) CheckoutBranchByName(name string) error {
+	branch, err := r.LookupBranch(name, git.BranchLocal)
+	if err != nil {
+		return fmt.Errorf("could not lookup branch %s: %s", name, err.Error())
+	}
+
+	return r.CheckoutBranch(branch)
+}

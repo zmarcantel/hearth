@@ -100,6 +100,41 @@ func action_init(ctx *cli.Context) {
 }
 
 //==================================================
+// env action
+//==================================================
+
+func action_env(ctx *cli.Context) {
+	if len(ctx.Args()) < 1 {
+		log.Fatalf("no branch name given")
+	} else if len(ctx.Args()) > 1 {
+		log.Fatalf("too many branch names given")
+	}
+
+	repo, err := repository.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// TODO: pull first to get new branches
+
+	branch_name := ctx.Args()[0]
+	branch, err := repo.LookupBranch(branch_name, git.BranchLocal)
+	if err != nil {
+		// no branch so make one
+		branch, err = repo.NewBranch(branch_name)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	defer branch.Free()
+
+	err = repo.CheckoutBranch(branch)
+	if err != nil {
+		log.Fatalf("could not checkout branch: %s", err.Error())
+	}
+}
+
+//==================================================
 // create action
 //==================================================
 func action_create_package(ctx *cli.Context) {
