@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/libgit2/git2go"
 	"github.com/zmarcantel/hearth/config"
 	"github.com/zmarcantel/hearth/repository"
+	"github.com/zmarcantel/hearth/repository/pkg"
 
 	"github.com/codegangsta/cli"
 )
@@ -111,14 +113,14 @@ func action_create_package(ctx *cli.Context) {
 	}
 
 	// get the config to read the repo directory
-	conf, err := config.Open()
+	repo, err := repository.Open()
 	if err != nil {
-		log.Fatalf("could not open config: %s", err.Error())
+		log.Fatalf("could not open repository: %s", err.Error())
 	}
 
 	// check the package does not already exist
 	package_name := ctx.Args()[0]
-	package_path := path.Join(conf.BaseDirectory, package_name)
+	package_path := path.Join(repo.Path, package_name)
 	if _, err := os.Stat(package_name); err == nil {
 
 	}
@@ -127,6 +129,42 @@ func action_create_package(ctx *cli.Context) {
 	err = os.Mkdir(package_path, 0755) // TODO: right perms?
 	if err != nil {
 		log.Fatalf("could not create package: %s", err.Error())
+	}
+
+	new_pkg := pkg.Info{
+		Name: package_name,
+	}
+
+	// check if we were given a target (mutually exclusive with install commands
+	// if not a target option, check for install commands
+	install_target := ctx.String("target")
+	if install_target != "" {
+		new_pkg.Target = install_target
+	} else {
+		// check if there is a base command, if not, ignore pre/post
+		install_cmd := ctx.String("cmd")
+		if install_cmd != "" {
+			new_pkg.InstallCmd.Cmd = install_cmd
+
+			// pre
+			pre_cmd := ctx.String("pre")
+			if install_cmd != "" {
+				new_pkg.InstallCmd.PreCmd = pre_cmd
+			}
+
+			// post
+			post_cmd := ctx.String("post")
+			if install_cmd != "" {
+				new_pkg.InstallCmd.PostCmd = post_cmd
+			}
+		}
+	}
+
+	// add package to config's map and write it out
+	// no state to cleanup on disk if writing config fails
+	repo.Config.Packages[package_name] = new_pkg
+	if err := repo.Config.Write(path.Join(repo.Path, config.Name)); err != nil {
+		log.Fatalf("could not write config after adding package: %s", err.Error())
 	}
 
 	// create a file if asked
@@ -149,6 +187,27 @@ func action_create_package(ctx *cli.Context) {
 			// TODO: for all users?
 			if err := f.Chmod(s.Mode() | os.FileMode(0111)); err != nil {
 				log.Fatalf("could not makefile executable: %s", err.Error())
+			}
+		}
+
+		if ctx.Bool("edit") {
+			editor := os.ExpandEnv("$EDITOR")
+			if len(editor) > 0 {
+				editor_path, err := exec.LookPath(editor)
+				if err != nil {
+					log.Fatalf("could not find %s: %s", editor, err.Error())
+				}
+
+				cmd := exec.Command(editor_path, file_path)
+				cmd.Stdin = os.Stdin
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				err = cmd.Run()
+				if err != nil {
+					log.Fatalf("error while running %s: %s", editor_path, err.Error())
+				}
+			} else {
+				log.Printf("WARN: no default editor in environment -- skipping.")
 			}
 		}
 	}

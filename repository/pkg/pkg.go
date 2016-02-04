@@ -32,9 +32,6 @@ func (i Install) RunAll(wd string) error {
 	}
 	defer os.Chdir(pushd)
 
-	// sanitize the wd
-	//if filepath.IsAbs(wd
-
 	// move into the package directory
 	if err := os.Chdir(wd); err != nil {
 		return err
@@ -83,6 +80,10 @@ func (i Install) run(cmd_str string) error {
 }
 
 func (i Install) MarshalYAML() (interface{}, error) {
+	if len(i.PreCmd) > 0 || len(i.PostCmd) > 0 {
+		return i, nil
+	}
+
 	return i.Cmd, nil
 }
 
@@ -163,7 +164,7 @@ func (u Update) run(cmd_str, wd, fname string) error {
 		}
 	}
 
-	// exapand.... exec has weird issues with expanding cmd.Env
+	// expand.... exec has weird issues with expanding cmd.Env
 	cmd_str = os.ExpandEnv(cmd_str)
 	cmd_str = strings.TrimSpace(cmd_str)
 
@@ -171,7 +172,7 @@ func (u Update) run(cmd_str, wd, fname string) error {
 
 	// keep an output buffer
 	var out bytes.Buffer
-	cmd := exec.Command("/bin/bash", cmd_array...)
+	cmd := exec.Command("/bin/bash", cmd_array...) // TODO: certainly not ideal
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	cmd.Env = os.Environ()
@@ -200,9 +201,9 @@ type UpdateMap map[string]Update
 // Holds metadata and creates an action point for packages.
 type Info struct {
 	Name       string  `yaml:"-"`
-	UpdateCmd  Update  `yaml:",omitempty"`
-	InstallCmd Install `yaml:",omitempty"` // mutually exclusive with Target
-	Target     string  `yaml:",omitempty"` // mutually exclusive with Install
+	UpdateCmd  Update  `yaml:"update,omitempty"`
+	InstallCmd Install `yaml:"install,omitempty"` // mutually exclusive with Target
+	Target     string  `yaml:",omitempty"`        // mutually exclusive with Install
 }
 
 func (i Info) Install(wd string) error {

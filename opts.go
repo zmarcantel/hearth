@@ -21,9 +21,13 @@ type Options struct {
 	RepoOrigin string
 
 	// package creation
-	StartWithEditor bool
-	InitPackageFile string
-	InitPackageExec bool
+	StartWithEditor        bool
+	InitPackageFile        string
+	InitPackageExec        bool
+	InitPackageTarget      string
+	InitPackageInstallPre  string
+	InitPackageInstallCmd  string
+	InitPackageInstallPost string
 
 	// package selection
 	AllPackages     bool
@@ -87,13 +91,14 @@ func init_flags() *cli.App {
 		//==================================================
 		{
 			Name:        "create",
-			Usage:       "create a new package, and optionally start $EDITOR",
-			Description: "create a new package, and optionally start $EDITOR",
+			Usage:       "create a new package, init files, and define its installation method",
+			Description: "create a new package, init files, and define its installation method",
 			Action:      action_create_package,
 			Flags: []cli.Flag{
+				// creation flags
 				cli.BoolFlag{
 					Name:        "e, edit",
-					Usage:       "open the given file [default: main.sh] in the new package",
+					Usage:       "open the new file [via -f/--file] in $EDITOR",
 					Destination: &opts.StartWithEditor,
 				},
 				cli.StringFlag{
@@ -105,6 +110,28 @@ func init_flags() *cli.App {
 					Name:        "exec",
 					Usage:       "make the file created as defined by --file executable",
 					Destination: &opts.InitPackageExec,
+				},
+
+				// installation flags
+				cli.StringFlag{
+					Name:        "t, target",
+					Usage:       "give a target for symlinking in installation",
+					Destination: &opts.InitPackageTarget,
+				},
+				cli.StringFlag{
+					Name:        "pre",
+					Usage:       "give a pre-installation command (mutually exclusive with -t/--target)",
+					Destination: &opts.InitPackageInstallPre,
+				},
+				cli.StringFlag{
+					Name:        "cmd",
+					Usage:       "give an installation command (mutually exclusive with -t/--target)",
+					Destination: &opts.InitPackageInstallCmd,
+				},
+				cli.StringFlag{
+					Name:        "post",
+					Usage:       "give a post-installation command (mutually exclusive with -t/--target)",
+					Destination: &opts.InitPackageInstallPost,
 				},
 			},
 		},

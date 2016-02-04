@@ -21,3 +21,6 @@ fmt:
 
 test: fmt
 	@go test -v -cover ./...
+
+install: build
+	@go install
