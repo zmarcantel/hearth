@@ -15,10 +15,14 @@ const (
 	HEARTH_VERSION_PATCH = 0
 )
 
+// TODO: use this struct....
 type Options struct {
 	// working environment
 	RepoPath   string
 	RepoOrigin string
+
+	// env/branch vars
+	BranchNoCreate bool
 
 	// package creation
 	StartWithEditor        bool
@@ -55,7 +59,6 @@ func init_flags() *cli.App {
 	app := cli.NewApp()
 	app.Name = "hearth"
 	app.Usage = "settings and dotfiles made easy"
-	app.HideHelp = true
 	app.Version = fmt.Sprintf("%d.%d.%d", HEARTH_VERSION_MAJOR, HEARTH_VERSION_MINOR, HEARTH_VERSION_PATCH)
 	app.Authors = []cli.Author{
 		{Name: "Zach Marcantel", Email: "zmarcantel@gmail.com"},
@@ -142,11 +145,17 @@ func init_flags() *cli.App {
 		//==================================================
 		{
 			Name:        "env",
-			Usage:       "change the dotfile environment (git branch)",
-			Description: "change the dotfile environment (git branch)",
+			Usage:       "change the dotfile environment (git branch) and create if it does not exist",
+			Description: "change the dotfile environment (git branch) and create if it does not exist",
 			ArgsUsage:   "branch_name",
-			Flags:       []cli.Flag{},
-			Action:      action_env,
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:        "n, no-create",
+					Usage:       "do not create the branch if it does not exist",
+					Destination: &opts.BranchNoCreate,
+				},
+			},
+			Action: action_env,
 		},
 
 		//==================================================

@@ -20,7 +20,7 @@ import (
 func main() {
 	app := init_flags()
 	if err := app.Run(os.Args); err != nil {
-		log.Fatalf(err.Error())
+		log.Fatal(err)
 	}
 }
 
@@ -119,7 +119,7 @@ func action_env(ctx *cli.Context) {
 
 	branch_name := ctx.Args()[0]
 	branch, err := repo.LookupBranch(branch_name, git.BranchLocal)
-	if err != nil {
+	if err != nil && ctx.Bool("no-create") == false {
 		// no branch so make one
 		branch, err = repo.NewBranch(branch_name)
 		if err != nil {
