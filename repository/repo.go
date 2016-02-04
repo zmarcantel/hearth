@@ -601,6 +601,7 @@ func (r Repository) CheckoutBranchByName(name string) error {
 	if err != nil {
 		return fmt.Errorf("could not lookup branch %s: %s", name, err.Error())
 	}
+	defer branch.Free()
 
 	return r.CheckoutBranch(branch)
 }

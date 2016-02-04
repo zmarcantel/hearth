@@ -455,10 +455,11 @@ func TestNewBranch(t *testing.T) {
 	// test branching
 	name := "test"
 
-	_, err = repo.NewBranch(name)
+	b, err := repo.NewBranch(name)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer b.Free()
 
 	_, err = repo.LookupBranch(name, git.BranchLocal)
 	if err != nil {
@@ -486,6 +487,7 @@ func TestCheckoutBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer branch.Free()
 
 	err = repo.CheckoutBranch(branch)
 	if err != nil {
@@ -509,10 +511,11 @@ func TestCheckoutBranchByName(t *testing.T) {
 	// test branching
 	name := "test"
 
-	_, err = repo.NewBranch(name)
+	b, err := repo.NewBranch(name)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer b.Free()
 
 	err = repo.CheckoutBranchByName(name)
 	if err != nil {
