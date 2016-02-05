@@ -21,19 +21,31 @@ import (
 
 const default_origin string = "git@github.com:foo/bar.git"
 
+func check_fatal(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func check_fatalf(t *testing.T, err error, form string, args ...interface{}) {
+	if err != nil {
+		t.Fatalf(form, args...)
+	}
+}
+
 func create_repo(origin string, t *testing.T) Repository {
 	rand.Seed(time.Now().UnixNano())
 	repo_path := path.Join(os.TempDir(), strconv.FormatUint(uint64(rand.Int63()), 10))
 
 	repo, err := Create(repo_path, origin)
 	if err != nil {
-		t.Fatalf("could not create repo for test: %s", err.Error())
+		check_fatalf(t, err, "could not create repo for test: %v", err)
 	}
 
 	if len(repo.Path) == 0 {
-		t.Fatalf("repo path name is empty")
+		check_fatalf(t, err, "repo path name is empty")
 	} else if repo.Path != repo_path {
-		t.Fatalf("repo path does not match the temp directory we gave it")
+		check_fatalf(t, err, "repo path does not match the temp directory we gave it")
 	}
 
 	return repo
@@ -49,9 +61,7 @@ func make_dir(prefix string, t *testing.T) string {
 	path := path.Join(prefix, strconv.FormatUint(uint64(rand.Int63()), 10))
 
 	err := os.Mkdir(path, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 
 	return path
 }
@@ -61,9 +71,7 @@ func make_file(prefix string, t *testing.T) string {
 	path := path.Join(prefix, strconv.FormatUint(uint64(rand.Int63()), 10))
 
 	err := ioutil.WriteFile(path, []byte(path), 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 
 	return path
 }
@@ -72,9 +80,7 @@ func create_origin_repo(t *testing.T) (Repository, string) {
 	repo_path := temp_dir()
 
 	r, err := git.InitRepository(repo_path, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 
 	return Repository{r, repo_path, config.Config{}}, repo_path
 }
@@ -103,16 +109,12 @@ func dir_walk_counts(path string) (dirs uint64, files uint64, err error) {
 
 func make_filled_dir(path string, files int, t *testing.T) string {
 	dir, err := ioutil.TempDir(path, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 
 	// make some new files
 	for f := 0; f < files; f += 1 {
 		file, err := ioutil.TempFile(dir, "")
-		if err != nil {
-			t.Fatalf("could not create tempfile: %s", err.Error())
-		}
+		check_fatalf(t, err, "could not create tempfile: %v", err)
 		file.Close()
 	}
 
@@ -148,15 +150,11 @@ func TestCreate_ConfigHasRepoDirectory(t *testing.T) {
 	}
 
 	conf_bytes, err := ioutil.ReadFile(conf_path)
-	if err != nil {
-		t.Error(err)
-	}
+	check_fatal(t, err)
 
 	var conf config.Config
-	err = yaml.Unmarshal(conf_bytes, &conf)
-	if err != nil {
-		t.Error(err)
-	}
+	check_fatal(t, yaml.Unmarshal(conf_bytes, &conf))
+
 	if conf.BaseDirectory != repo.Path {
 		t.Errorf("incorect repo directory in the config: expected=%s, got=%s", repo.Path, conf.BaseDirectory)
 	}
@@ -167,9 +165,7 @@ func TestCreate_OriginAdded(t *testing.T) {
 	defer os.RemoveAll(repo.Path)
 
 	lst, err := repo.Remotes.List()
-	if err != nil {
-		t.Error(err)
-	}
+	check_fatal(t, err)
 
 	if len(lst) != 1 {
 		t.Errorf("repo has %d remotes, but we expected 1 (origin) to exist", len(lst))
@@ -196,17 +192,13 @@ func TestCommitThenPush(t *testing.T) {
 		// commit and push
 		commit_message := fmt.Sprintf("commit #%d", i)
 		c, err := repo.CommitAndPush(commit_message, "master")
-		if err != nil {
-			t.Fatal(err)
-		}
+		check_fatal(t, err)
 		defer c.Free()
 
 		// check that origin has i+1 commits
 		expect := i + 1
 		count, err := origin.CommitCount()
-		if err != nil {
-			t.Fatalf("could not count commits: %s", err.Error())
-		}
+		check_fatalf(t, err, "could not count commits: %v", err)
 		if count != uint64(expect) {
 			t.Fatalf("expected %d commits after commit #%d, but found %d", expect, i, count)
 		}
@@ -239,17 +231,13 @@ func TestPull(t *testing.T) {
 		// commit and push
 		commit_message := fmt.Sprintf("commit #%d", i)
 		c, err := repo.CommitAndPush(commit_message, "master")
-		if err != nil {
-			t.Fatal(err)
-		}
+		check_fatal(t, err)
 		defer c.Free()
 
 		// check that origin has i+1 commits
 		expect := i + 1
 		count, err := origin.CommitCount()
-		if err != nil {
-			t.Fatalf("could not count commits: %s", err.Error())
-		}
+		check_fatalf(t, err, "could not count commits: %v", err)
 		if count != uint64(expect) {
 			t.Fatalf("expected %d commits after commit #%d, but found %d", expect, i, count)
 		}
@@ -265,9 +253,7 @@ func TestPull(t *testing.T) {
 
 	// check we have comm/2 commites
 	count, err := test_repo.CommitCount()
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	if count != uint64(num_commits/2)+1 {
 		t.Fatalf("expected test repo to have %d commits but has %d", (num_commits/2)+1, count)
 	}
@@ -280,18 +266,14 @@ func TestPull(t *testing.T) {
 
 	// check we have num_commit commits
 	count, err = test_repo.CommitCount()
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	if count != uint64(num_commits)+1 {
 		t.Fatalf("expected test repo to have %d commits but has %d", num_commits+1, count)
 	}
 
 	// get a count of directories and files in the repo
 	dirs, files, err := dir_walk_counts(test_repo.Path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 
 	// assert directory count
 	expect_dirs := uint64((num_commits * subdir_depth) + num_commits)
@@ -325,17 +307,14 @@ func TestChangesFiles(t *testing.T) {
 
 	// commit
 	c, err := repo.CommitAll("test commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer c.Free()
 
 	// check counts
 	expect := len(changed_paths) + 1 // .hearthrc
 	changed, err := repo.ChangedInLastCommit()
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
+
 	changed_count := len(changed)
 	if changed_count != expect {
 		t.Fatalf("expected %d changed files, got %d", expect, changed_count)
@@ -381,9 +360,7 @@ func TestModifiedInLast(t *testing.T) {
 	f := make_file(repo.Path, t)
 
 	c, err := repo.CommitAll("test commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer c.Free()
 
 	if repo.ModifiedInLast(filepath.Base(f)) {
@@ -391,14 +368,10 @@ func TestModifiedInLast(t *testing.T) {
 	}
 
 	err = ioutil.WriteFile(f, []byte("some new info"), 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 
 	second_commit, err := repo.CommitAll("another commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer second_commit.Free()
 
 	if repo.ModifiedInLast(filepath.Base(f)) == false {
@@ -414,9 +387,7 @@ func TestCreatedInLast(t *testing.T) {
 	f := make_file(repo.Path, t)
 
 	c, err := repo.CommitAll("test commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer c.Free()
 
 	if repo.CreatedInLast(filepath.Base(f)) == false {
@@ -424,14 +395,10 @@ func TestCreatedInLast(t *testing.T) {
 	}
 
 	err = ioutil.WriteFile(f, []byte("some new info"), 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 
 	second_commit, err := repo.CommitAll("another commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer second_commit.Free()
 
 	if repo.CreatedInLast(filepath.Base(f)) {
@@ -447,24 +414,19 @@ func TestNewBranch(t *testing.T) {
 	// must have a commit to have a HEAD to have a branch :/
 	make_file(repo.Path, t)
 	c, err := repo.CommitAll("test commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer c.Free()
 
 	// test branching
 	name := "test"
 
 	b, err := repo.NewBranch(name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer b.Free()
 
-	_, err = repo.LookupBranch(name, git.BranchLocal)
-	if err != nil {
-		t.Fatalf("could not lookup new branch: %s", err.Error())
-	}
+	bl, err := repo.LookupBranch(name, git.BranchLocal)
+	check_fatalf(t, err, "could not lookup new branch: %v", err)
+	defer bl.Free()
 }
 
 func TestCheckoutBranch(t *testing.T) {
@@ -475,23 +437,30 @@ func TestCheckoutBranch(t *testing.T) {
 	// must have a commit to have a HEAD to have a branch :/
 	make_file(repo.Path, t)
 	c, err := repo.CommitAll("test commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer c.Free()
 
 	// test branching
 	name := "test"
 
-	branch, err := repo.NewBranch(name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	b, err := repo.NewBranch(name)
+	check_fatal(t, err)
+	defer b.Free()
+
+	err = repo.CheckoutBranch(b)
+	check_fatalf(t, err, "could not checkout branch: %v", err)
+
+	head, err := repo.Head()
+	check_fatal(t, err)
+
+	branch := head.Branch()
 	defer branch.Free()
 
-	err = repo.CheckoutBranch(branch)
-	if err != nil {
-		t.Fatalf("could not checkout branch: %s", err.Error())
+	test_name, err := branch.Name()
+	check_fatal(t, err)
+
+	if test_name != name {
+		t.Fatalf("did not change branches -- still on %s", test_name)
 	}
 }
 
@@ -503,24 +472,114 @@ func TestCheckoutBranchByName(t *testing.T) {
 	// must have a commit to have a HEAD to have a branch :/
 	make_file(repo.Path, t)
 	c, err := repo.CommitAll("test commit")
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer c.Free()
 
 	// test branching
 	name := "test"
 
 	b, err := repo.NewBranch(name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	check_fatal(t, err)
 	defer b.Free()
 
 	err = repo.CheckoutBranchByName(name)
-	if err != nil {
-		t.Fatalf("could not checkout branch: %s", err.Error())
+	check_fatalf(t, err, "could not checkout branch: %v", err)
+
+	head, err := repo.Head()
+	check_fatal(t, err)
+
+	branch := head.Branch()
+	defer branch.Free()
+
+	test_name, err := branch.Name()
+	check_fatal(t, err)
+
+	if test_name != name {
+		t.Fatalf("did not change branches -- still on %s", test_name)
 	}
 }
 
-// TODO: test checkout branch with dirty working directory
+func TestCheckoutBranchDirtyWorkingDir(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	// must have a commit to have a HEAD to have a branch :/
+	make_file(repo.Path, t)
+	c, err := repo.CommitAll("test commit")
+	check_fatal(t, err)
+	defer c.Free()
+
+	// test branching
+	name := "test"
+
+	b, err := repo.NewBranch(name)
+	check_fatal(t, err)
+	defer b.Free()
+
+	err = repo.CheckoutBranch(b)
+	check_fatalf(t, err, "could not checkout branch: %v", err)
+
+	// make another file to dirty the tree (in the new branch)
+	test_data := "testing"
+	f := make_file(repo.Path, t)
+	err = ioutil.WriteFile(f, []byte(test_data), 0755)
+	check_fatal(t, err)
+
+	// checkout master again
+	err = repo.CheckoutBranchByName("master")
+	check_fatal(t, err)
+
+	data, err := ioutil.ReadFile(f)
+	check_fatal(t, err)
+
+	if string(data) != test_data {
+		t.Fatalf("data does not match...\nexpected: %s\ngot: %s", test_data, string(data))
+	}
+}
+
+func TestCheckoutBranchFilesChange(t *testing.T) {
+	repo := create_repo(default_origin, t)
+	defer os.RemoveAll(repo.Path)
+	defer repo.Free()
+
+	// must have a commit to have a HEAD to have a branch :/
+	f := make_file(repo.Path, t)
+	err := ioutil.WriteFile(f, []byte("1"), 0755)
+	check_fatalf(t, err, "could not write conflicting data for test: %v", err)
+
+	c, err := repo.CommitAll("test commit")
+	check_fatal(t, err)
+	defer c.Free()
+
+	// test branching
+	name := "test"
+
+	// make the branch
+	b, err := repo.NewBranch(name)
+	check_fatal(t, err)
+	defer b.Free()
+
+	// checkout new branch
+	err = repo.CheckoutBranch(b)
+	check_fatalf(t, err, "could not checkout branch: %v", err)
+
+	// make changes to the file
+	err = ioutil.WriteFile(f, []byte("2"), 0755)
+	check_fatalf(t, err, "could not write conflicting data for test: %v", err)
+
+	// make commit in new branch
+	c2, err := repo.CommitAll("commit in " + name)
+	check_fatal(t, err)
+	defer c2.Free()
+
+	err = repo.CheckoutBranchByName("master")
+	check_fatalf(t, err, "could not checkout master: %v", err)
+
+	data, err := ioutil.ReadFile(f)
+	check_fatal(t, err)
+
+	if string(data) != "1" {
+		t.Fatalf("wrong data (%s) in the file, expected (%s)", string(data), "1")
+	}
+}

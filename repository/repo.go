@@ -593,7 +593,19 @@ func (r Repository) CheckoutBranch(b *git.Branch) error {
 		return fmt.Errorf("could not get branch name: %s", err.Error())
 	}
 
-	return r.SetHead(fmt.Sprintf("refs/heads/%s", name))
+	// set HEAD
+	err = r.SetHead(fmt.Sprintf("refs/heads/%s", name))
+	if err != nil {
+		return fmt.Errorf("could not set HEAD to branch: %s", err.Error())
+	}
+
+	// checkout options
+	opts := git.CheckoutOpts{
+		Strategy: git.CheckoutForce, // TODO: scary
+	}
+
+	return r.CheckoutHead(&opts)
+	//return r.CheckoutTree(tree, &opts)
 }
 
 func (r Repository) CheckoutBranchByName(name string) error {
