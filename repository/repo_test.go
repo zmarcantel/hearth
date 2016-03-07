@@ -15,8 +15,8 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/libgit2/git2go"
 	"github.com/zmarcantel/hearth/config"
+	git "gopkg.in/libgit2/git2go.v23"
 )
 
 const default_origin string = "git@github.com:foo/bar.git"

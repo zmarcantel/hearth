@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -18,6 +19,7 @@ type Install struct {
 	PreCmd  string `yaml:"pre,omitempty"`
 	Cmd     string `yaml:"cmd,omitempty"`
 	PostCmd string `yaml:"post,omitempty"`
+	Stow    bool   `yaml:",omitempty"`
 }
 
 func (i Install) RunAll(wd string) error {
@@ -57,6 +59,7 @@ func (i Install) RunAll(wd string) error {
 }
 
 func (i Install) run(cmd_str string) error {
+	cmd_str = os.ExpandEnv(cmd_str)
 	cmd_raw := strings.Split(cmd_str, " ")
 	if length := len(cmd_raw); length == 0 {
 		// TODO: hmmm can this happen?
@@ -64,6 +67,8 @@ func (i Install) run(cmd_str string) error {
 	} else if length == 1 {
 		cmd_raw = append(cmd_raw, "")
 	}
+
+	// TODO: add env vars
 
 	var out bytes.Buffer
 	cmd := exec.Command(cmd_raw[0], cmd_raw[1:]...)
@@ -207,9 +212,42 @@ type Info struct {
 }
 
 func (i Info) Install(wd string) error {
+	if strings.HasPrefix(i.Target, "~/") {
+		i.Target = path.Join(os.Getenv("HOME"), i.Target[2:])
+	}
+
+	all_files := false
+	target := i.Target
+	if strings.HasPrefix(i.Target, "all:") {
+		all_files = true
+		target = target[4:]
+	}
+	if strings.HasPrefix(target, "~/") {
+		target = path.Join(os.Getenv("HOME"), target[2:])
+	}
+
+	fmt.Println(i.Target)
+
 	// if we have a target, then symlink and shortcircuit the rest of the install
-	if len(i.Target) > 0 {
-		if err := os.Symlink(wd, i.Target); err != nil {
+	if all_files {
+		top_levels, err := filepath.Glob(filepath.Join(wd, "*"))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, p := range top_levels {
+			target = path.Join(target, path.Base(p))
+
+			fmt.Printf("            --> %s\n", target)
+			if err := os.Symlink(p, target); err != nil {
+				log.Println(err)
+			}
+		}
+
+		return nil
+	} else if len(i.Target) > 0 {
+		target = path.Join(target, i.Name)
+		if err := os.Symlink(wd, target); err != nil {
 			log.Fatal(err)
 		}
 		return nil

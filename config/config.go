@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -20,6 +21,9 @@ func Path() string {
 func Open() (Config, error) {
 	var config Config
 	default_file := Path()
+	if strings.HasPrefix(default_file, "~/") {
+		default_file = path.Join(os.Getenv("HOME"), default_file[2:])
+	}
 
 	// try to read the default
 	config_bytes, err := ioutil.ReadFile(default_file)

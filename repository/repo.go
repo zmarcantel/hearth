@@ -13,7 +13,7 @@ import (
 	"github.com/zmarcantel/hearth/config"
 	"github.com/zmarcantel/hearth/repository/pkg"
 
-	git "github.com/libgit2/git2go"
+	git "gopkg.in/libgit2/git2go.v23"
 )
 
 // Convenience method for getting the default path for a repository (~/.hearth)
@@ -38,11 +38,16 @@ func Open() (Repository, error) {
 		return repo, err
 	}
 
-	repo_raw, err := git.OpenRepository(conf.BaseDirectory)
+	conf_path := conf.BaseDirectory
+	if strings.HasPrefix(conf_path, "~/") {
+		conf_path = path.Join(os.Getenv("HOME"), conf_path[2:])
+	}
+
+	repo_raw, err := git.OpenRepository(conf_path)
 	if err != nil {
 		return repo, fmt.Errorf("could not open git repository: %s", err)
 	}
-	repo = Repository{repo_raw, conf.BaseDirectory, conf}
+	repo = Repository{repo_raw, conf_path, conf}
 
 	return repo, nil
 }
@@ -94,8 +99,14 @@ func Create(path, origin string) (Repository, error) {
 // used for generating a config on creation of a new repo
 func (r *Repository) InitFiles() error {
 	config_path := path.Join(r.Path, config.Name) // we create the config inside the repo
-	r.Config.BaseDirectory = r.Path               // save the path in the config
 
+	rel_path := r.Path
+	home_path := os.Getenv("HOME")
+	if strings.HasPrefix(rel_path, home_path) {
+		rel_path = path.Join("~", rel_path[len(home_path):])
+	}
+
+	r.Config.BaseDirectory = rel_path // save the path in the config
 	return r.Config.Write(config_path)
 }
 
@@ -127,7 +138,7 @@ func (r Repository) GetPackage(name string) (pkg.Info, bool) {
 		return pkg.Info{}, false
 	}
 
-	p, exists := r.Config.Packages["name"]
+	p, exists := r.Config.Packages[name]
 	return p, exists
 }
 

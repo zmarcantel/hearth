@@ -119,7 +119,52 @@ func init_flags() *cli.App {
 				// installation flags
 				cli.StringFlag{
 					Name:        "t, target",
-					Usage:       "give a target for symlinking in installation",
+					Usage:       "give a target for symlinking in installation [typically $HOME]",
+					Destination: &opts.InitPackageTarget,
+				},
+				cli.StringFlag{
+					Name:        "pre",
+					Usage:       "give a pre-installation command (mutually exclusive with -t/--target)",
+					Destination: &opts.InitPackageInstallPre,
+				},
+				cli.StringFlag{
+					Name:        "cmd",
+					Usage:       "give an installation command (mutually exclusive with -t/--target)",
+					Destination: &opts.InitPackageInstallCmd,
+				},
+				cli.StringFlag{
+					Name:        "post",
+					Usage:       "give a post-installation command (mutually exclusive with -t/--target)",
+					Destination: &opts.InitPackageInstallPost,
+				},
+			},
+		},
+
+		//==================================================
+		// remove
+		//==================================================
+		{
+			Name:        "remove",
+			Usage:       "remove a package",
+			Description: "remove a package",
+			ArgsUsage:   "package [package...]",
+			Flags:       []cli.Flag{},
+			Action:      action_remove_package,
+		},
+
+		//==================================================
+		// modify
+		//==================================================
+		{
+			Name:        "modify",
+			Usage:       "modify one or more packages",
+			Description: "modify one or more packages",
+			ArgsUsage:   "package [package...]",
+			Action:      action_modify_package,
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:        "t, target",
+					Usage:       "give a target for symlinking in installation [typically $HOME]",
 					Destination: &opts.InitPackageTarget,
 				},
 				cli.StringFlag{

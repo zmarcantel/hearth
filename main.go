@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/libgit2/git2go"
 	"github.com/zmarcantel/hearth/config"
 	"github.com/zmarcantel/hearth/repository"
 	"github.com/zmarcantel/hearth/repository/pkg"
 
 	"github.com/codegangsta/cli"
+	git "gopkg.in/libgit2/git2go.v23"
 )
 
 func main() {
@@ -156,6 +156,10 @@ func action_create_package(ctx *cli.Context) {
 	// check the package does not already exist
 	package_name := ctx.Args()[0]
 	package_path := path.Join(repo.Path, package_name)
+	if strings.HasPrefix(package_path, "~/") {
+		package_path = path.Join(os.Getenv("HOME"), package_path[2:])
+	}
+
 	if _, err := os.Stat(package_name); err == nil {
 
 	}
@@ -170,28 +174,29 @@ func action_create_package(ctx *cli.Context) {
 		Name: package_name,
 	}
 
+	install_target := ctx.String("target")
+	cmd := ctx.String("cmd")
+	pre_cmd := ctx.String("pre")
+	post_cmd := ctx.String("post")
+
 	// check if we were given a target (mutually exclusive with install commands
 	// if not a target option, check for install commands
-	install_target := ctx.String("target")
 	if install_target != "" {
-		new_pkg.Target = install_target
-	} else {
-		// check if there is a base command, if not, ignore pre/post
-		install_cmd := ctx.String("cmd")
-		if install_cmd != "" {
-			new_pkg.InstallCmd.Cmd = install_cmd
+		home_path := os.Getenv("HOME")
+		if strings.HasPrefix(install_target, home_path) {
+			new_pkg.Target = path.Join("~", install_target[len(home_path):])
+		} else {
+			new_pkg.Target = install_target
+		}
+	} else if cmd != "" {
+		new_pkg.InstallCmd.Cmd = cmd
 
-			// pre
-			pre_cmd := ctx.String("pre")
-			if install_cmd != "" {
-				new_pkg.InstallCmd.PreCmd = pre_cmd
-			}
+		if pre_cmd != "" {
+			new_pkg.InstallCmd.PreCmd = pre_cmd
+		}
 
-			// post
-			post_cmd := ctx.String("post")
-			if install_cmd != "" {
-				new_pkg.InstallCmd.PostCmd = post_cmd
-			}
+		if post_cmd != "" {
+			new_pkg.InstallCmd.PostCmd = post_cmd
 		}
 	}
 
@@ -249,6 +254,93 @@ func action_create_package(ctx *cli.Context) {
 }
 
 //==================================================
+// remove action
+//==================================================
+func action_remove_package(ctx *cli.Context) {
+	conf, err := config.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	args := ctx.Args()
+	if len(args) == 0 {
+		log.Fatalf("no package name given.")
+	}
+
+	for _, p := range args {
+		if _, exists := conf.Packages[p]; exists == false {
+			log.Printf("pakage %s does not exist", p)
+			continue
+		}
+
+		dir := path.Join(conf.BaseDirectory, p)
+		err = os.RemoveAll(dir)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		delete(conf.Packages, p)
+	}
+
+	if err := conf.Write(config.Path()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+//==================================================
+// modify action
+//==================================================
+func action_modify_package(ctx *cli.Context) {
+	conf, err := config.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	args := ctx.Args()
+	if len(args) == 0 {
+		log.Fatalf("no package name given.")
+	}
+
+	for _, p := range args {
+		pack, exists := conf.Packages[p]
+		if exists == false {
+			log.Printf("pakage %s does not exist", p)
+			continue
+		}
+
+		target := ctx.String("target")
+		cmd := ctx.String("cmd")
+		pre_cmd := ctx.String("pre")
+		post_cmd := ctx.String("post")
+
+		if len(target) > 0 {
+			home_path := os.Getenv("HOME")
+			if strings.HasPrefix(target, home_path) {
+				pack.Target = path.Join("~", target[len(home_path):])
+			} else {
+				pack.Target = target
+			}
+		} else if cmd != "" {
+			pack.InstallCmd.Cmd = cmd
+
+			if pre_cmd != "" {
+				pack.InstallCmd.PreCmd = pre_cmd
+			}
+
+			if post_cmd != "" {
+				pack.InstallCmd.PostCmd = post_cmd
+			}
+		}
+
+		conf.Packages[p] = pack
+	}
+
+	if err := conf.Write(config.Path()); err != nil {
+		log.Fatal(err)
+	}
+}
+
+//==================================================
 // install action
 //==================================================
 func action_install(ctx *cli.Context) {
@@ -268,12 +360,11 @@ func action_install(ctx *cli.Context) {
 			log.Fatalf("cannot install unknown package: %s", p)
 		}
 
-		fmt.Printf("[ install ] %s... ", p)
+		fmt.Printf("[ install ] %s  to  ", p)
 		err := pack.Install(path.Join(repo.Path, p))
 		if err != nil {
 			log.Fatal(err) // TODO: allow skipping errors
 		}
-		fmt.Printf("done!\n")
 	}
 }
 
@@ -294,7 +385,7 @@ func action_update(ctx *cli.Context) {
 	for _, p := range args {
 		pack, exists := repo.GetPackage(p)
 		if exists == false {
-			log.Fatalf("cannot install unknown package: %s", p)
+			log.Fatalf("cannot update unknown package: %s", p)
 		}
 
 		fmt.Printf("[ update ] %s... ", p)
